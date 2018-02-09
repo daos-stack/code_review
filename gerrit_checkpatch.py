@@ -128,8 +128,11 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
         # +        op_data.op_hash_offset = hash_x_index(page->index, 0);$
         # make/gcc/shellcheck output:
         # warn_source.c:19:1: warning: control reaches end of non-void
+        # bad_yaml.yml:3:1: [error] too many blank lines (1 > 0) (empty-lines)
         # pylint output:
-        # W: module.py:156: pylint-unused-variable: Unused variable 'idx'
+        # module.py:156: pylint-unused-variable: Unused variable 'idx'
+        # ruby output:
+        # bad_ruby.rb: error: line 2, column 2: undefined method j
         line = line.strip()
         if not line:
             level, kind, message = None, None, None
@@ -158,7 +161,19 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                 # Detect pylint output
                 path = None
                 idx = None
-                if sections == 2:
+                if sections == 3:
+                    kind = 'ruby-lint'
+                    code = 'lint'
+                    try:
+                        parts = line.split(':', 4)
+                        path = parts[0]
+                        lvl = parts[1].strip().upper()
+                        line_no_str = parts[2].split(',')[0].strip()
+                        lnumber = line_no_str.split(' ', 1)[1].strip()
+                        message = parts[3].strip()
+                    except ValueError:
+                        pass
+                elif sections == 2:
                     try:
                         path, lnumber, idx, lvl, message = line.split(':', 4)
                     except ValueError:
@@ -166,25 +181,31 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                             path, lnumber, lvl, message = line.split(':', 3)
                         except ValueError:
                             pass
-                    if path is not None:
-                        try:
-                            if idx is None:
-                                kind = 'pylint'
-                                code = lvl.strip()
-                            else:
-                                kind = 'lint'
-                                code = 'lint'
-                            message = message.strip()
-                            level = lvl.upper()
-                            if lnumber.isdigit() and level and kind:
-                                line_number = int(lnumber)
-                                add_comment(path, line_number, level,
-                                            kind, code, message)
-                                level = None
-                                continue
-                        except ValueError:
-                            # Fall back to Checkpatch.pl output
-                            pass
+                elif sections == 1:
+                    try:
+                        path, lnumber, idx, rest_line = line.split(':', 3)
+                        lvl, message = rest_line.strip().split(' ', 1)
+                    except ValueError:
+                        pass
+                if path is not None:
+                    try:
+                        if idx is None:
+                            kind = 'pylint'
+                            code = lvl.strip()
+                        else:
+                            kind = 'lint'
+                            code = 'lint'
+                        message = message.strip()
+                        level = lvl.strip('[] ').upper()
+                        if lnumber.isdigit() and level and kind:
+                            line_number = int(lnumber)
+                            add_comment(path, line_number, level,
+                                        kind, code, message)
+                            level = None
+                            continue
+                    except ValueError:
+                        # Fall back to Checkpatch.pl output
+                        pass
 
             # ERROR:CODE_INDENT: code indent should use tabs where possible
             try:
