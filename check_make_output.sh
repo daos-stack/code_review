@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# This is intended to be run in a Jenkins review job.
+# Input
+#   GERRIT_PROJECT and GERRIT_BRANCH are set by Jenkins
+#   MAKE_OUTPUT is the file with the build output log.
+#   PROJECT_REPO is the directory for the source files.
+#      Needs to be set if is not the same directory as GERRIT_PROJECT
+
 if [ -z "${GERRIT_PROJECT}" ]; then
   # Commit Hook
   git_args=(ls-files --exclude-standard)
@@ -10,7 +17,19 @@ fi
 
 : "${MAKE_OUTPUT:="make_output"}"
 : "${GERRIT_PROJECT:="."}"
-: "${GERRIT_BRANCH:="master"}"
+: "${PROJECT_REPO:="${GERRIT_PROJECT}"}"
+
+# Reviews that build typically checkout the project into a directory
+# named for the last path in the ${GERRIT_PROJECT} so try a guess.
+if [ ! -d "${PROJECT_REPO}" ]; then
+  test_dir=${PROJECT_REPO#*/}
+  if [ -d "${test_dir}" ]; then
+    PROJECT_REPO="${test_dir}"
+  else
+    echo "Could not find PROJECT_REPO=\"${PROJECT_REPO}\" to check"
+    exit 1
+  fi
+fi
 
 if [ ! -e "${MAKE_OUTPUT}" ]; then
   # Nothing to do.
@@ -18,7 +37,7 @@ if [ ! -e "${MAKE_OUTPUT}" ]; then
 fi
 
 # Only output lines for the files in the review.
-pushd "${GERRIT_PROJECT}" >> /dev/null
+pushd "${PROJECT_REPO}" >> /dev/null
   file_list1=$(git "${git_args[@]}")
 popd >> /dev/null
 file_list=${file_list1//$'\n'/|}

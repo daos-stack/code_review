@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Input if this in a Jenkins review job.
+#   GERRIT_PROJECT and GERRIT_BRANCH are set by Jenkins
+#   PROJECT_REPO is the directory to review.
+#      Needs to be set if is not the same directory as GERRIT_PROJECT
+#
+# If this is a commit hook, it is expected the working directory
+# is at the base of the repository checkout.
+#
+
 # Only output lines for the files in the review.
 
 if [ -z "${GERRIT_PROJECT}" ]; then
@@ -11,10 +20,20 @@ else
 fi
 
 : "${GERRIT_PROJECT:="."}"
-: "${GERRIT_BRANCH:="master"}"
+# Reviews that build typically checkout the project into a directory
+# named for the last path in the ${GERRIT_PROJECT} so try a guess.
+if [ ! -d "${PROJECT_REPO}" ]; then
+  test_dir=${PROJECT_REPO#*/}
+  if [ -d "${test_dir}" ]; then
+    PROJECT_REPO="${test_dir}"
+  else
+    echo "Could not find PROJECT_REPO=\"${PROJECT_REPO}\" to check"
+    exit 1
+  fi
+fi
 
 rc=0
-pushd "${GERRIT_PROJECT}" > /dev/null
+pushd "${PROJECT_REPO}" > /dev/null
 
   file_list1=$(git "${git_args[@]}")
 

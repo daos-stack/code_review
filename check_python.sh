@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# Input if this in a Jenkins review job.
+#   GERRIT_PROJECT and GERRIT_BRANCH are set by Jenkins
+#   PROJECT_REPO is the directory to review.
+#      Needs to be set if is not the same directory as GERRIT_PROJECT
+#   PYLINT_OUT can be used to set the path for the pylint log unless
+#       a project specific check_modules.sh is used.
+#
+# If this is a commit hook, it is expected the working directory
+# is at the base of the repository checkout.
+#
+
 if [ -z "${GERRIT_PROJECT}" ]; then
   # Commit Hook
   git_args=(ls-files --exclude-standard)
@@ -7,17 +18,29 @@ else
   # Review job
   git_args=(diff-tree --name-only -r HEAD "origin/${GERRIT_BRANCH}")
 fi
-: "${GERRIT_PROJECT:="."}"
-: "${GERRIT_BRANCH:="master"}"
 
 : "${PYLINT_OUT:="pylint.log"}"
 
-gp=${GERRIT_PROJECT}
+: "${GERRIT_PROJECT:="."}"
+: "${PROJECT_REPO:="${GERRIT_PROJECT}"}"
 
+# Reviews that build typically checkout the project into a directory
+# named for the last path in the ${GERRIT_PROJECT} so try a guess.
+if [ ! -d "${PROJECT_REPO}" ]; then
+  test_dir=${PROJECT_REPO#*/}
+  if [ -d "${test_dir}" ]; then
+    PROJECT_REPO="${test_dir}"
+  else
+    echo "Could not find PROJECT_REPO=\"${PROJECT_REPO}\" to check"
+    exit 1
+  fi
+fi
 
-# If the project has a check_module file, use it instead of the
+repo=${PROJECT_REPO}
+
+# If the project has a check_modules.sh file, use it instead of the
 # default checks
-project_check_module="$(find "${gp}" -name check_modules.sh -print -quit)"
+project_check_module="$(find "${repo}" -name check_modules.sh -print -quit)"
 if [ -n "${project_check_module}" ]; then
   # A local check_modules file creates a pylint.log if any issues are found
   pylint_out="pylint.log"
@@ -31,11 +54,11 @@ if [ -n "${project_check_module}" ]; then
 fi
 
 # Default checking
-pylint_rc="$(find "${gp}" -name pylint.rc -print -quit)"
-pylint3_rc="$(find "${gp}" -name pylint3.rc -print -quit)"
+pylint_rc="$(find "${repo}" -name pylint.rc -print -quit)"
+pylint3_rc="$(find "${repo}" -name pylint3.rc -print -quit)"
 
 def_python="python"
-tox_ini="$(find "${gp}" -name tox.ini -print -quit)"
+tox_ini="$(find "${repo}" -name tox.ini -print -quit)"
 if [ -e "${tox_ini}" ]; then
   grep envlist "${tox_ini}" | grep py3
   if [ $? == 0 ]; then
