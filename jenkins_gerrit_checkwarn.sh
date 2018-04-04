@@ -42,11 +42,23 @@ fi
 
 # Some prompt variables are usually not set.
 set +u
+if [ -n "${WORKSPACE}" ];then
+  # Need to remove older virtualenv with pip/wheel etc.
+  set +e
+  grep "\#\!${WORKSPACE}"  -r test_env
+  grep_st=$?
+  set -e
+  if [ "${grep_st}" -eq 0 ]; then
+    rm -rf test_env
+  fi
+fi
 if [ ! -e test_env ]; then
-  virtualenv --system-site-packages test_env
+  virtualenv --system-site-packages \
+    --no-setuptools --no-pip --no-wheel test_env
   source test_env/bin/activate
-  pip install -U --force-reinstall pyOpenSSL
-  pip install -U pylint flake8
+  pip install -I --root test_env --prefix test_env \
+    -U --force-reinstall pyOpenSSL
+  pip install -I --root test_env --prefix test_env -U pylint flake8
 else
   source test_env/bin/activate
 fi
