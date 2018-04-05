@@ -43,11 +43,13 @@ repo=${PROJECT_REPO}
 project_check_module="$(find "${repo}" -name check_modules.sh -print -quit)"
 if [ -n "${project_check_module}" ]; then
   # A local check_modules file creates a pylint.log if any issues are found
-  pylint_out="pylint.log"
-  rm -f "${pylint_out}"
-  ${project_check_module}
-  if [ -e "${pylint_out}" ]; then
-    cat "${pylint_out}"
+  cm_pylint_out="${GERRIT_PROJECT}/pylint.log"
+  rm -f "${cm_pylint_out}"
+  pushd "${GERRIT_PROJECT}" > /dev/nul
+    ${project_check_module}
+  popd
+  if [ -e "${cm_pylint_out}" ]; then
+    cat "${cm_pylint_out}"
     exit 1
   fi
   exit 0
