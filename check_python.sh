@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Input if this in a Jenkins review job.
-#   GERRIT_PROJECT and GERRIT_BRANCH are set by Jenkins
+#   GERRIT_PROJECT and GIT_BRANCH are set by Jenkins
 #   PROJECT_REPO is the directory to review.
 #      Needs to be set if is not the same directory as GERRIT_PROJECT
 #   PYLINT_OUT can be used to set the path for the pylint log unless
@@ -11,12 +11,12 @@
 # is at the base of the repository checkout.
 #
 
-if [ -z "${GERRIT_PROJECT}" ]; then
+if [ -z "${GIT_BRANCH}" ]; then
   # Commit Hook
   git_args=(ls-files --exclude-standard)
 else
   # Review job
-  git_args=(diff-tree --name-only -r HEAD "origin/${GERRIT_BRANCH}")
+  git_args=(diff-tree --name-only -r HEAD "origin/${GIT_BRANCH}")
 fi
 
 : "${PYLINT_OUT:="pylint.log"}"

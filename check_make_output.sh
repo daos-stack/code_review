@@ -2,17 +2,17 @@
 
 # This is intended to be run in a Jenkins review job.
 # Input
-#   GERRIT_PROJECT and GERRIT_BRANCH are set by Jenkins
+#   GERRIT_PROJECT and GIT_BRANCH are set by Jenkins
 #   MAKE_OUTPUT is the file with the build output log.
 #   PROJECT_REPO is the directory for the source files.
 #      Needs to be set if is not the same directory as GERRIT_PROJECT
 
-if [ -z "${GERRIT_PROJECT}" ]; then
+if [ -z "${GIT_BRANCH}" ]; then
   # Commit Hook
   git_args=(ls-files --exclude-standard)
 else
   # Review job
-  git_args=(diff-tree --name-only -r HEAD "origin/${GERRIT_BRANCH}")
+  git_args=(diff-tree --name-only -r HEAD "origin/${GIT_BRANCH}")
 fi
 
 : "${MAKE_OUTPUT:="make_output"}"
