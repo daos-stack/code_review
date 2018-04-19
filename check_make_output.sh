@@ -12,7 +12,7 @@ if [ -z "${GIT_BRANCH}" ]; then
   git_args=(ls-files --exclude-standard)
 else
   # Review job
-  git_args=(diff-tree --name-only -r HEAD "origin/${GIT_BRANCH}")
+  git_args=(diff-tree --name-only -r HEAD HEAD^)
 fi
 
 : "${MAKE_OUTPUT:="make_output"}"

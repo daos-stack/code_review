@@ -10,13 +10,13 @@
 #
 
 # Only output lines for the files in the review.
-
+set -x
 if [ -z "${GIT_BRANCH}" ]; then
   # Commit Hook
   git_args=(ls-files --exclude-standard)
 else
   # Review job
-  git_args=(diff-tree --name-only -r HEAD "origin/${GIT_BRANCH}")
+  git_args=(diff-tree --name-only -r HEAD HEAD^)
 fi
 
 : "${GERRIT_PROJECT:="."}"
