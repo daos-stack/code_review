@@ -55,7 +55,7 @@ def _getenv_list(key, default=None, sep=':'):
         return default
     return value.split(sep)
 
-GERRIT_HOST = os.getenv('GERRIT_HOST', 'review.whamcloud.com')
+GERRIT_HOST = os.getenv('GERRIT_HOST', 'review.hpdd.intel.com')
 GERRIT_AUTH_PATH = os.getenv('GERRIT_AUTH_PATH', 'GERRIT_AUTH')
 GERRIT_USERNAME = os.getenv("GERRIT_USERNAME", None)
 GERRIT_HTTP_TOKEN = os.getenv("GERRIT_HTTP_TOKEN", None)

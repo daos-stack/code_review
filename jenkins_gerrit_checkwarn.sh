@@ -14,9 +14,23 @@ check_style="$(find "${mydir}" -name checkpatch.pl -print -quit)"
 check_shell="$(find "${mydir}" -name shellcheck_scripts.sh -print -quit)"
 check_python="$(find "${mydir}" -name check_python.sh -print -quit)"
 
+# For a matrix review we only want to default for the full check for the
+# el7 target, just compiler warnings for the rest.
+: "${FULL_REVIEW:=1}"
+set +u
+# shellcheck disable=SC2154
+if [ -n "${distro}" ]; then
+  if [ "${distro}" != 'el7' ]; then
+    : "${FULL_REVIEW:=0}"
+  fi
+fi
+set -u
+
 # colon separated list
-def_checkpatch_paths="${check_make}:${check_style}:${check_shell}"
-def_checkpatch_paths+=":${check_python}"
+def_checkpatch_paths="${check_make}"
+if [ "${FULL_REVIEW}" -ne 0 ]; then
+  def_checkpatch_paths+=":${check_style}:${check_shell}:${check_python}"
+fi
 
 : "${CHECKPATCH_PATHS:="${def_checkpatch_paths}"}"
 export CHECKPATCH_PATHS
@@ -55,11 +69,13 @@ fi
 if [ ! -e test_env ]; then
   virtualenv --system-site-packages \
     --no-setuptools --no-pip --no-wheel test_env
+  # shellcheck disable=SC1091
   source test_env/bin/activate
   pip install -I --root test_env --prefix test_env \
     -U --force-reinstall pyOpenSSL
   pip install -I --root test_env --prefix test_env -U pylint flake8
 else
+  # shellcheck disable=SC1091
   source test_env/bin/activate
 fi
 set -u
