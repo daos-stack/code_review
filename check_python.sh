@@ -39,23 +39,32 @@ repo=${PROJECT_REPO}
 
 # If the project has a check_modules.sh file, use it instead of the
 # default checks
+project_check_module=""
 pushd "${repo}" > /dev/null
-project_check_module="$(find . -name check_modules.sh -print -quit)"
+if [ -e "./check_modules.sh" ]; then
+  project_check_module="./check_modules.sh"
+else
+  if [ -e "utils/check_modules.sh" ]; then
+    project_check_module="utils/check_modules.sh"
+  else
+    project_check_module="$(find . -name check_modules.sh -print -quit)"
+  fi
+fi
 if [ -n "${project_check_module}" ]; then
   # A local check_modules file creates a pylint.log if any issues are found
-  cm_pylint_out="./pylint.log"
+  cm_pylint_out="${PWD}/pylint.log"
   rm -f "${cm_pylint_out}"
   # Must suppress issues being written to stdout.
-  ${project_check_module} > check_module.out
-  if [ -e "${cm_pylint_out}" ]; then
-    file_list1=$(git "${git_args[@]}")
-    file_list=${file_list1//$'\n'/ }
-    for script_file in ${file_list}; do
-      grep "${script_file}" "${cm_pylint_out}"
-    done
-    popd
-    exit 1
-  fi
+    "${project_check_module}" > check_module.out
+    if [ -e "${cm_pylint_out}" ]; then
+      file_list1=$(git "${git_args[@]}")
+      file_list=${file_list1//$'\n'/ }
+      for script_file in ${file_list}; do
+        grep "${script_file}" "${cm_pylint_out}"
+      done
+      popd
+      exit 1
+    fi
   popd
   exit 0
 fi

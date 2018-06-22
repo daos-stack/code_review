@@ -44,7 +44,12 @@ def_ignored_files="code_review/checkpatch.pl"
 : "${CHECKPATCH_IGNORED_FILES:="${def_ignored_files}"}"
 export CHECKPATCH_IGNORED_FILES
 
-REVIEW_HISTORY_BASE="${CORAL_ARTIFACTS}"/"${JOB_NAME}"
+set +u
+if [ -n "${CORAL_ARTIFACTS}" ]; then
+  REVIEW_HISTORY_BASE="${CORAL_ARTIFACTS}"/"${JOB_NAME}"
+fi
+set -u
+: "${REVIEW_HISTORY_BASE:="${PWD}"}"
 export REVIEW_HISTORY_PATH="${REVIEW_HISTORY_BASE}"/REVIEW_HISTORY
 
 if [ ! -e "$REVIEW_HISTORY_PATH" ]; then

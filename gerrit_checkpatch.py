@@ -60,7 +60,9 @@ GERRIT_AUTH_PATH = os.getenv('GERRIT_AUTH_PATH', 'GERRIT_AUTH')
 GERRIT_USERNAME = os.getenv("GERRIT_USERNAME", None)
 GERRIT_HTTP_TOKEN = os.getenv("GERRIT_HTTP_TOKEN", None)
 GERRIT_CHANGE_NUMBER = os.getenv('GERRIT_CHANGE_NUMBER', None)
+GERRIT_PATCHSET_REVISION = os.getenv('GERRIT_PATCHSET_REVISION', None)
 GERRIT_INSECURE = os.getenv('GERRIT_INSECURE', None)
+GERRIT_DRY_RUN = os.getenv('GERRIT_DRY_RUN', None)
 
 # GERRIT_AUTH should contain a single JSON dictionary of the form:
 # {
@@ -266,7 +268,8 @@ class Reviewer(object):
     """
     def __init__(self, host, username, password):
         self.host = host
-        self.auth = requests.auth.HTTPDigestAuth(username, password)
+        if username is not None:
+            self.auth = requests.auth.HTTPDigestAuth(username, password)
         self.logger = logging.getLogger(__name__)
         self.post_enabled = True
         self.request_timeout = 60
@@ -395,7 +398,9 @@ class Reviewer(object):
         path = '/changes/' + change['id'] + '/revisions/' + \
                revision + '/review'
         self._debug("post_review: path = '%s'", path)
-        return self._post(path, review_input)
+        if GERRIT_DRY_RUN is None:
+            return self._post(path, review_input)
+        return True
 
     def check_patch(self, patch):
         """
@@ -445,7 +450,10 @@ class Reviewer(object):
         self._debug("review_change: change = %s, subject = '%s'",
                     change['id'], change.get('subject', ''))
 
-        current_revision = change.get('current_revision')
+        if GERRIT_PATCHSET_REVISION:
+            current_revision = GERRIT_PATCHSET_REVISION
+        else:
+            current_revision = change.get('current_revision')
         self._debug("change_needs_review: current_revision = '%s'",
                     current_revision)
         if not current_revision:
@@ -477,14 +485,19 @@ def main():
     """_"""
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
+    username = None
+    password = None
     if GERRIT_USERNAME and GERRIT_HTTP_TOKEN:
         username = GERRIT_USERNAME
         password = GERRIT_HTTP_TOKEN
     else:
-        with open(GERRIT_AUTH_PATH) as auth_file:
-            auth = json.load(auth_file)
-            username = auth[GERRIT_HOST]['gerrit/http']['username']
-            password = auth[GERRIT_HOST]['gerrit/http']['password']
+        try:
+            with open(GERRIT_AUTH_PATH) as auth_file:
+                auth = json.load(auth_file)
+                username = auth[GERRIT_HOST]['gerrit/http']['username']
+                password = auth[GERRIT_HOST]['gerrit/http']['password']
+        except IOError:
+            logging.debug("No Gerrit credentials given")
 
     reviewer = Reviewer(GERRIT_HOST, username, password)
 
