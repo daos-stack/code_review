@@ -20,7 +20,7 @@
 #
 # GPL HEADER END
 #
-# Copyright (c) 2014, Intel Corporation.
+# Copyright (c) 2014-2018, Intel Corporation.
 #
 # Author: John L. Hammond <john.hammond@intel.com>
 #
@@ -175,6 +175,18 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                         message = parts[3].strip()
                     except ValueError:
                         pass
+                    except IndexError:
+                        try:
+                            # Extra :<sp> in the message part means this is
+                            # actually a GCC/shellcheck mesage
+                            path, lnumber, idx, lvl, message = \
+                                line.split(':', 4)
+                        except ValueError:
+                            try:
+                                path, lnumber, lvl, message = \
+                                    line.split(':', 3)
+                            except ValueError:
+                                pass
                 elif sections == 2:
                     try:
                         path, lnumber, idx, lvl, message = line.split(':', 4)
