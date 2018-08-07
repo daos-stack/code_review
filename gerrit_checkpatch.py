@@ -217,7 +217,7 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                                         kind, code, message)
                             level = None
                             continue
-                    except ValueError:
+                    except (ValueError, AttributeError):
                         # Fall back to Checkpatch.pl output
                         pass
 

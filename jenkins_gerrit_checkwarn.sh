@@ -16,7 +16,6 @@ check_python="$(find "${mydir}" -name check_python.sh -print -quit)"
 
 # For a matrix review we only want to default for the full check for the
 # el7 target, just compiler warnings for the rest.
-: "${FULL_REVIEW:=1}"
 set +u
 # shellcheck disable=SC2154
 if [ -n "${distro}" ]; then
@@ -24,6 +23,7 @@ if [ -n "${distro}" ]; then
     : "${FULL_REVIEW:=0}"
   fi
 fi
+: "${FULL_REVIEW:=1}"
 set -u
 
 # colon separated list
