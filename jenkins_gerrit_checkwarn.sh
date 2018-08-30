@@ -1,7 +1,7 @@
 #!/bin/bash -uex
 
 # comma separated list
-def_ignore="SPLIT_STRING,SSCANF_TO_KSTRTO,PREFER_KERNEL_TYPES"
+def_ignore="SPLIT_STRING,SSCANF_TO_KSTRTO,PREFER_KERNEL_TYPES,BRACES"
 def_ignore+=",USE_NEGATIVE_ERRNO,CAMELCASE"
 
 : "${IGNORE:="${def_ignore}"}"
