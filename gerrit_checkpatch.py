@@ -63,6 +63,7 @@ GERRIT_CHANGE_NUMBER = os.getenv('GERRIT_CHANGE_NUMBER', None)
 GERRIT_PATCHSET_REVISION = os.getenv('GERRIT_PATCHSET_REVISION', None)
 GERRIT_INSECURE = os.getenv('GERRIT_INSECURE', None)
 GERRIT_DRY_RUN = os.getenv('GERRIT_DRY_RUN', None)
+BUILD_URL = os.getenv('BUILD_URL', None)
 
 # GERRIT_AUTH should contain a single JSON dictionary of the form:
 # {
@@ -87,7 +88,7 @@ CHECKPATCH_IGNORED_KINDS = _getenv_list('CHECKPATCH_IGNORED_KINDS', [
     'LCONSOLE',
     'LEADING_SPACE'])
 STYLE_LINK = os.getenv('STYLE_LINK',
-                       'http://wiki.lustre.org/Lustre_Coding_Style_Guidelines')
+                       'https://wiki.hpdd.intel.com/display/DC/Coding+Rules')
 
 USE_CODE_REVIEW_SCORE = False
 
@@ -258,8 +259,8 @@ def review_input_and_score(path_line_comments, warning_count):
 
     if score < 0:
         return {
-            'message': ('%d style warning(s).\nFor more details please see %s'
-                        % (warning_count[0], STYLE_LINK)),
+            'message': ('%d style warning(s) for job %s\nPlease review %s'
+                        % (warning_count[0], BUILD_URL, STYLE_LINK)),
             'labels': {
                 'Code-Review': code_review_score
                 },
@@ -267,7 +268,8 @@ def review_input_and_score(path_line_comments, warning_count):
             'notify': 'OWNER',
             }, score
     return {
-        'message': 'No errors found in files by check patch',
+        'message': 'No errors found in files by check patch. job %s' % \
+                   BUILD_URL,
         'notify': 'NONE',
         }, score
 
