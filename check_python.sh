@@ -51,15 +51,18 @@ else
   fi
 fi
 if [ -n "${project_check_module}" ]; then
-  # A local check_modules file creates a pylint.log if any issues are found
+  # A local check_modules file creates a pylint.log (empty if no
+  # issues are found)
   cm_pylint_out="${PWD}/pylint.log"
   rm -f "${cm_pylint_out}"
   # Must suppress issues being written to stdout.
     "${project_check_module}" > check_module.out
-    if [ -e "${cm_pylint_out}" ]; then
-        grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
+    if [ -s "${cm_pylint_out}" ]; then
+      grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
       popd
       exit 1
+    else
+      rm -f "${cm_pylint_out}"
     fi
   popd
   exit 0
@@ -73,8 +76,7 @@ pylint3_rc="$(find "${repo}" -name pylint3.rc -print -quit)"
 def_python="python"
 tox_ini="$(find "${repo}" -name tox.ini -print -quit)"
 if [ -e "${tox_ini}" ]; then
-  grep envlist "${tox_ini}" | grep py3
-  if [ $? == 0 ]; then
+  if grep envlist "${tox_ini}" | grep py3; then
     def_python="python3"
   fi
 fi
@@ -99,7 +101,7 @@ pushd "${PROJECT_REPO}" > /dev/null
 
   tmpl="{path}:{line}: pylint-{symbol}: {msg}"
 
-  pylint="$(which pylint)"
+  pylint="$(command -v pylint)"
   if [ -z "${pylint}" ]; then
     echo "pylint not found"
     exit 1
@@ -107,45 +109,47 @@ pushd "${PROJECT_REPO}" > /dev/null
 
   for script_file in ${file_list}; do
 
-    pylint_cmd=(${pylint} ${pyl_opts} ${script_file})
-    pylint3_cmd=(${pylint} ${pyl3_opts} ${script_file})
+    IFS=" " read -r -a pylint_cmd <<< "${pylint} ${pyl_opts} ${script_file}"
+    IFS=" " read -r -a pylint3_cmd <<< "${pylint} ${pyl3_opts} ${script_file}"
     if [[ ${script_file} == *.py ]]; then
       # if there is a shebang use it.
-      grep '^#!/bin/.*python' "${script_file}"
-      if [ $? -eq 0 ]; then
-        grep '^#!/bin/.*python3' "${script_file}"
-        if [ $? -eq 0 ]; then
-          python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1
-          let rc=rc+$?
+      if grep '^#!/bin/.*python' "${script_file}"; then
+        if grep '^#!/bin/.*python3' "${script_file}"; then
+          if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
+            "${PYLINT_OUT}" 2>&1; then
+            (( rc=rc+PIPESTATUS[0] ))
+          fi
         else
-          python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1
-          let rc=rc+$?
+          if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
+            "${PYLINT_OUT}" 2>&1; then
+            (( rc=rc+PIPESTATUS[0] ))
+          fi
         fi
       else
         if [ "${def_python}" == "python" ]; then
-          python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1
-          let rc=rc+$?
+          if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
+            "${PYLINT_OUT}" 2>&1; then
+            (( rc=rc+PIPESTATUS[0] ))
+          fi
         else
-          python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1
-          let rc=rc+$?
+          if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
+            "${PYLINT_OUT}" 2>&1; then
+            (( rc=rc+PIPESTATUS[0] ))
+          fi
         fi
       fi
     else
-      grep '^#!/bin/.*python' "${script_file}"
-      if [ $? -eq 0 ]; then
-        grep '^#!/bin/.*python3' "${script_file}"
-        if [ $? -eq 0 ]; then
-          python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1
-          let rc=rc+$?
+      if grep '^#!/bin/.*python' "${script_file}"; then
+        if grep '^#!/bin/.*python3' "${script_file}"; then
+          if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
+            "${PYLINT_OUT}" 2>&1; then
+            (( rc=rc+PIPESTATUS[0] ))
+          fi
         else
-          python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1
-          let rc=rc+$?
+          if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
+            "${PYLINT_OUT}" 2>&1; then
+            (( rc=rc+PIPESTATUS[0] ))
+          fi
         fi
       fi
     fi
@@ -155,4 +159,3 @@ pushd "${PROJECT_REPO}" > /dev/null
   fi
 popd > /dev/null
 exit ${rc}
-

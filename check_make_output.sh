@@ -42,4 +42,3 @@ pushd "${PROJECT_REPO}" >> /dev/null
 popd >> /dev/null
 file_list=${file_list1//$'\n'/|}
 grep -E "${file_list}" "${MAKE_OUTPUT}"
-

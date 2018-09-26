@@ -10,7 +10,6 @@
 #
 
 # Only output lines for the files in the review.
-set -x
 if [ -z "${GIT_BRANCH}" ]; then
   # Commit Hook
   git_args=(ls-files --exclude-standard)
@@ -43,17 +42,12 @@ pushd "${PROJECT_REPO}" > /dev/null
 
   for script_file in ${file_list}; do
 
-    if [[ ${script_file} == *.sh ]]; then
-      shellcheck --format=gcc "${script_file}"
-      let rc=rc+$?
-    else
-      grep -E '^#!/bin/(bash|sh)' "${script_file}"
-      if [ $? -eq 0 ]; then
-        shellcheck --format=gcc "${script_file}"
-        let rc=rc+$?
+    if [[ ${script_file} == *.sh ]] ||
+      grep -E '^#!/bin/(bash|sh)' "${script_file}"; then
+      if ! shellcheck --format=gcc "${script_file}"; then
+        (( rc=rc+PIPESTATUS[0] ))
       fi
     fi
   done
 popd > /dev/null
 exit ${rc}
-

@@ -44,10 +44,10 @@ pushd "${PROJECT_REPO}" > /dev/null
   for script_file in ${file_list}; do
 
     if [[ ${script_file} == *.json ]]; then
-      jsonlint "${script_file}" | grep -v ': '
-      let rc=rc+$?
+      if ! jsonlint "${script_file}" | grep -v ': '; then
+        (( rc=rc+PIPESTATUS[0] ))
+      fi
     fi
   done
 popd > /dev/null
 exit ${rc}
-

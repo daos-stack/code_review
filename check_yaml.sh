@@ -44,10 +44,10 @@ pushd "${PROJECT_REPO}" > /dev/null
   for script_file in ${file_list}; do
 
     if [[ ${script_file} == *.yml ]]; then
-      yamllint -f parsable "${script_file}"
-      let rc=rc+$?
+      if ! yamllint -f parsable "${script_file}"; then
+        (( rc=rc+PIPESTATUS[0] ))
+      fi
     fi
   done
 popd > /dev/null
 exit ${rc}
-

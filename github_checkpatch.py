@@ -22,27 +22,24 @@
 #
 # Copyright (c) 2014-2018, Intel Corporation.
 #
-# Author: John L. Hammond <john.hammond@intel.com>
+# Author: Brian J. Murrell <brian.murrell@interlinx.bc.ca>
+#   based on gerrit_checkpatch.py
 #
-# Modified to support pylint, gcc, and shellcheck warnings.
 """
-Gerrit Checkpatch Reviewer Daemon
-~~~~~~ ~~~~~~~~~~ ~~~~~~~~ ~~~~~~
+Github Checkpatch Reviewer
+~~~~~~ ~~~~~~~~~~ ~~~~~~~~
 
-* Watch for new change revisions in a gerrit instance.
-* Pass new revisions through checkpatch script.
-* POST reviews back to gerrit based on checkpatch output.
+* Run linters on HEAD.
+* POST reviews back to github based on checkpatch output.
 """
 
-import base64
 import fnmatch
 import logging
-import json
 import os
 import sys
 import subprocess
-import errno
-import requests
+import re
+from github import Github
 
 #pylint: disable=too-many-branches
 #pylint: disable=broad-except
@@ -56,26 +53,8 @@ def _getenv_list(key, default=None, sep=':'):
         return default
     return value.split(sep)
 
-GERRIT_HOST = os.getenv('GERRIT_HOST', 'review.hpdd.intel.com')
-GERRIT_AUTH_PATH = os.getenv('GERRIT_AUTH_PATH', 'GERRIT_AUTH')
-GERRIT_USERNAME = os.getenv("GERRIT_USERNAME", None)
-GERRIT_HTTP_TOKEN = os.getenv("GERRIT_HTTP_TOKEN", None)
-GERRIT_CHANGE_NUMBER = os.getenv('GERRIT_CHANGE_NUMBER', None)
-GERRIT_PATCHSET_REVISION = os.getenv('GERRIT_PATCHSET_REVISION', None)
-GERRIT_INSECURE = os.getenv('GERRIT_INSECURE', None)
-GERRIT_DRY_RUN = os.getenv('GERRIT_DRY_RUN', None)
 BUILD_URL = os.getenv('BUILD_URL', None)
 
-# GERRIT_AUTH should contain a single JSON dictionary of the form:
-# {
-#     "review.example.com": {
-#         "gerrit/http": {
-#             "username": "example-checkpatch",
-#             "password": "1234"
-#         }
-#     }
-#     ...
-# }
 
 CHECKPATCH_PATHS = _getenv_list('CHECKPATCH_PATHS', ['checkpatch.pl'])
 CHECKPATCH_ARGS = os.getenv('CHECKPATCH_ARGS', '--show-types -').split(' ')
@@ -233,28 +212,19 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                 level, kind, message = None, None, None
 
 
-def review_input_and_score(path_line_comments, warning_count, changed_files):
+def review_input_and_score(path_line_comments, warning_count):
     """
-    Convert { PATH: { LINE: [COMMENT, ...] }, ... }, [11] to a gerrit
+    Convert { PATH: { LINE: [COMMENT, ...] }, ... }, [11] to a
     ReviewInput() and score
     """
     review_comments = {}
-    extra_msg = ""
 
     for path, line_comments in path_line_comments.iteritems():
-        logging.debug("path=%s", path)
-        logging.debug("changed_files=%s", changed_files)
-        if path in changed_files:
-            path_comments = []
-            for line, comment_list in line_comments.iteritems():
-                message = '\n'.join(comment_list)
-                path_comments.append({'line': line, 'message': message})
-            review_comments[path] = path_comments
-        else:
-            for line, comment_list in line_comments.iteritems():
-                if line > 0:
-                    message = '\n'.join(comment_list)
-                    extra_msg += "\n%s:%s:%s\n" % (path, line, message)
+        path_comments = []
+        for line, comment_list in line_comments.iteritems():
+            message = '\n'.join(comment_list)
+            path_comments.append({'line': line, 'message': message})
+        review_comments[path] = path_comments
 
     if warning_count[0] > 0:
         score = -1
@@ -269,8 +239,8 @@ def review_input_and_score(path_line_comments, warning_count, changed_files):
 
     if score < 0:
         return {
-            'message': ('%d style warning(s) for job %s\n%sPlease review %s' %
-                        (warning_count[0], BUILD_URL, extra_msg, STYLE_LINK)),
+            'message': ('Style warning(s) for job %s\nPlease review %s' %
+                        (BUILD_URL, STYLE_LINK)),
             'labels': {
                 'Code-Review': code_review_score
                 },
@@ -278,25 +248,64 @@ def review_input_and_score(path_line_comments, warning_count, changed_files):
             'notify': 'OWNER',
             }, score
     return {
-        'message': 'No errors found in files by check patch.%s job %s' %
-                   (extra_msg, BUILD_URL),
+        'message': 'No errors found in files by check patch. job %s' %
+                   BUILD_URL,
         'notify': 'NONE',
         }, score
+
+def add_patch_linenos(review_input, patch):
+    """
+    Add patch relative line numbers to review_input.
+    """
+
+    hunknum = None
+    filename = None
+    new_start_line = None
+    src_lineno = None
+    patch_lineno = None
+    for line in patch.split('\n'):
+        if hunknum:
+            patch_lineno += 1
+        if line.startswith("+++ b"):
+            filename = line.rstrip()[6:]
+            hunknum = 0
+            patch_lineno = 0
+        if line.startswith("@@ "):
+            hunknum += 1
+            matches = re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*', line)
+            if not matches:
+                print "error parsing ", line
+                sys.exit(1)
+            new_start_line = matches.group(3)
+            src_lineno = int(new_start_line) - 1
+        if new_start_line:
+            if line.startswith(" ") or \
+               line.startswith("+"):
+                src_lineno += 1
+        if line.startswith("+"):
+            try:
+                for comment in review_input['comments'][filename]:
+                    if comment['line'] == src_lineno:
+                        comment['patch-line'] = patch_lineno
+            except KeyError:
+                pass
+        # to debug line mapping
+        #print "{0} {1} {2}".format(patch_lineno, src_lineno, line)
 
 class Reviewer(object):
     """
     * Pipe changeset through checkpatch.
-    * Convert checkpatch output to gerrit ReviewInput().
-    * Post ReviewInput() to gerrit instance.
+    * Convert checkpatch output to ReviewInput().
+    * Post ReviewInput() to Github instance.
 
     """
-    def __init__(self, host, username, password):
-        self.host = host
-        if username is not None:
-            self.auth = requests.auth.HTTPDigestAuth(username, password)
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.post_enabled = True
-        self.request_timeout = 60
+        project, repo = os.environ['GIT_URL'].split('/')[-2:]
+        repo = repo[0:-4]
+        gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'])
+        repo = gh_context.get_repo("{0}/{1}".format(project, repo))
+        self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
 
     def _debug(self, msg, *args):
         """_"""
@@ -306,144 +315,65 @@ class Reviewer(object):
         """_"""
         self.logger.error(msg, *args)
 
-    def _url(self, path):
-        """_"""
-        if GERRIT_INSECURE is not None:
-            return 'http://' + self.host + '/a' + path
-        return 'https://' + self.host + '/a' + path
-
-    def _get(self, path, decode=True):
-        """
-        GET path return Response.
-        """
-        url = self._url(path)
-        try:
-            res = requests.get(url, auth=self.auth,
-                               timeout=self.request_timeout)
-        except Exception as exc:
-            self._error("cannot GET '%s': exception = %s", url, str(exc))
-            return None
-
-        # pylint: disable=no-member
-        if res.status_code != requests.codes.ok:
-            self._error("cannot GET '%s': reason = %s, status_code = %d",
-                        url, res.reason, res.status_code)
-            return None
-        if decode:
-            content = res.content.decode(encoding="ascii")
-            self._debug("_get content: %s", content)
-            # Gerrit uses " )]}'" to guard against XSSI.
-            return json.loads(content[5:])
-
-        return res
-
-    def _post(self, path, obj):
-        """
-        POST json(obj) to path, return True on success.
-        """
-        url = self._url(path)
-        data = json.dumps(obj)
-        if not self.post_enabled:
-            self._debug("_post: disabled: url = '%s', data = '%s'", url, data)
-            return False
-
-        try:
-            res = requests.post(url, data=data,
-                                headers={'Content-Type': 'application/json'},
-                                auth=self.auth, timeout=self.request_timeout)
-        except Exception as exc:
-            self._error("cannot POST '%s': exception = %s", url, str(exc))
-            return False
-
-        # pylint: disable=no-member
-        if res.status_code != requests.codes.ok:
-            self._error("cannot POST '%s': reason = %s, status_code = %d",
-                        url, res.reason, res.status_code)
-            return False
-
-        return True
-
-    def get_files(self, change, revision='current'):
-        """
-        GET a dict with FileInfo for changed files
-        """
-        path = '/changes/' + change['id'] + '/revisions/' + revision + '/files'
-        self._debug("get_files_ = '%s'", path)
-
-        content = self._get(path)
-        if not content:
-            return None
-
-        return content
-
-    def get_changes(self, query):
-        """
-        GET a list of ChangeInfo()s for all changes matching query.
-
-        {'status':'open', '-age':'60m'} =>
-          GET /changes/?q=project:...+status:open+-age:60m&o=CURRENT_REVISION
-            => [ChangeInfo()...]
-        """
-        query = dict(query)
-        # pylint: disable=no-member
-        path = ('/changes/?q=' +
-                '+'.join(k + ':' + v for k, v in query.iteritems()) +
-                '&o=CURRENT_REVISION')
-        res = self._get(path)
-        if not res:
-            return []
-
-        return res
-
-    def decode_patch(self, content):
-        """
-        Decode gerrit's idea of base64.
-
-        The base64 encoded patch returned by gerrit isn't always
-        padded correctly according to b64decode. Don't know why. Work
-        around this by appending more '=' characters or truncating the
-        content until it decodes. But do try the unmodified content
-        first.
-        """
-        for i in (0, 1, 2, 3, -1, -2, -3):
-            if i >= 0:
-                padded_content = content + (i * '=')
-            else:
-                padded_content = content[:i]
-
-            try:
-                return base64.b64decode(padded_content)
-            except TypeError as exc:
-                self._debug("decode_patch: len = %d, exception = %s",
-                            len(padded_content), str(exc))
-
-    def get_patch(self, change, revision='current'):
-        """
-        GET and decode the (current) patch for change.
-        """
-        path = '/changes/' + change['id'] + '/revisions/' + revision + '/patch'
-        self._debug("get_patch: path = '%s'", path)
-        res = self._get(path, decode=False)
-        if not res:
-            return ''
-
-        self._debug("get_patch: len(content) = %d, content = '%s...'",
-                    len(res.content), res.content[:20])
-
-        return self.decode_patch(res.content)
-
-    def post_review(self, change, revision, review_input):
+    def post_review(self, review_input):
         """
         POST review_input for the given revision of change.
         """
-        path = '/changes/' + change['id'] + '/revisions/' + \
-               revision + '/review'
-        self._debug("post_review: path = '%s'", path)
-        if GERRIT_DRY_RUN is None:
-            return self._post(path, review_input)
+
+        commit = None
+        for commit in self.pull_request.get_commits():
+            if commit.sha == os.environ['GIT_COMMIT']:
+                break
+            commit = None
+
+        if not commit:
+            print "Couldn't find commit"
+            sys.exit(1)
+        review_comment = review_input['message']
+        comments = []
+        num_errors_non_in_patch = 0
+
+        try:
+            for path in review_input['comments']:
+                for comment in review_input['comments'][path]:
+                    try:
+                        comments.append({
+                            "path": path,
+                            "position": comment['patch-line'],
+                            "body": comment['message']
+                        })
+                    except KeyError:
+                       # not a line modified in the patch, add it to the
+                       # general message
+                        if num_errors_non_in_patch < 1:
+                            review_comment += "\n\nFYI: Errors found in lines " \
+                                              "not modified in the patch:\n"
+                        review_comment += "\n[{0}:{1}](https://github.com/daos-stack" \
+                                          "/daos/blob/{3}/{0}#L{1}):\n{2}".format(
+                                              path, comment['line'], comment['message'],
+                                              commit.sha)
+                        num_errors_non_in_patch += 1
+        except KeyError:
+            pass
+
+        try:
+            if review_input['labels']['Code-Review'] < 0:
+                event = "REQUEST_CHANGES"
+            else:
+                event = "APPROVE"
+        except KeyError:
+            event = "APPROVE"
+
+        res = self.pull_request.create_review(
+            commit,
+            review_comment,
+            event=event,
+            comments=comments)
+        print res
+
         return True
 
-    def check_patch(self, patch, changed_files):
+    def check_patch(self, patch):
         """
         Run each script in CHECKPATCH_PATHS on patch, return a
         ReviewInput() and score.
@@ -458,7 +388,7 @@ class Reviewer(object):
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE)
             except OSError as exception:
-                if exception.errno == errno.ENOENT:
+                if exception.errno == 2:
                     print "Cound not find {0}".format(path)
                     sys.exit(1)
 
@@ -467,98 +397,45 @@ class Reviewer(object):
                         path, out[:80], err[:80])
             parse_checkpatch_output(out, path_line_comments, warning_count)
 
-        return review_input_and_score(path_line_comments, warning_count,
-                                      changed_files)
+        return review_input_and_score(path_line_comments, warning_count)
 
-    def change_needs_review(self, change):
+    def review_change(self):
         """
-        * Bail if the change isn't open (status is not 'NEW').
-        * Bail if we've already reviewed the current revision.
-        """
-        status = change.get('status')
-        if status != 'NEW':
-            self._debug("change_needs_review: status = %s", status)
-            return False
-
-        current_revision = change.get('current_revision')
-        self._debug("change_needs_review: current_revision = '%s'",
-                    current_revision)
-        if not current_revision:
-            return False
-
-        return True
-
-    def review_change(self, change):
-        """
-        Review the current revision of change.
+        Review the current patch on HEAD
         * Pipe the patch through checkpatch(es).
-        * POST review to gerrit.
+        * POST review to github.
         """
         score = 1
-        self._debug("review_change: change = %s, subject = '%s'",
-                    change['id'], change.get('subject', ''))
-
-        if GERRIT_PATCHSET_REVISION:
-            current_revision = GERRIT_PATCHSET_REVISION
-        else:
-            current_revision = change.get('current_revision')
-        self._debug("change_needs_review: current_revision = '%s'",
-                    current_revision)
-        if not current_revision:
-            return score
-
-        patch = self.get_patch(change, current_revision)
+        patch = subprocess.check_output(["git", "diff", self.pull_request.base.sha])
         if not patch:
             self._debug("review_change: no patch")
             return score
 
-        changed_files = self.get_files(change, current_revision)
-        if not changed_files:
-            self._debug("review_change: no file list")
-            return score
-
-        review_input, score = self.check_patch(patch, changed_files)
+        review_input, score = self.check_patch(patch)
         self._debug("review_change: score = %d", score)
-        self.post_review(change, current_revision, review_input)
+
+        # add patch line numbers to review_input
+        add_patch_linenos(review_input, patch)
+
+        self.post_review(review_input)
         return score
 
-    def update_single_change(self, change):
+    def update_single_change(self):
         """_"""
-        open_changes = self.get_changes({'status': 'open',
-                                         'change': change})
-        self._debug("update: got %d open_changes", len(open_changes))
-
         score = 1
-        for open_change in open_changes:
-            if self.change_needs_review(open_change):
-                score = self.review_change(open_change)
+        score = self.review_change()
         return score
 
 def main():
     """_"""
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-    username = None
-    password = None
-    if GERRIT_USERNAME and GERRIT_HTTP_TOKEN:
-        username = GERRIT_USERNAME
-        password = GERRIT_HTTP_TOKEN
-    else:
-        try:
-            with open(GERRIT_AUTH_PATH) as auth_file:
-                auth = json.load(auth_file)
-                username = auth[GERRIT_HOST]['gerrit/http']['username']
-                password = auth[GERRIT_HOST]['gerrit/http']['password']
-        except IOError:
-            logging.debug("No Gerrit credentials given")
+    reviewer = Reviewer()
 
-    reviewer = Reviewer(GERRIT_HOST, username, password)
-
-    if GERRIT_CHANGE_NUMBER:
-        score = reviewer.update_single_change(GERRIT_CHANGE_NUMBER)
-        if score > 0:
-            sys.exit(0)
-        sys.exit(1)
+    score = reviewer.update_single_change()
+    if score > 0:
+        sys.exit(0)
+    sys.exit(1)
 
 
 if __name__ == "__main__":
