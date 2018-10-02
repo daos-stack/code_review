@@ -232,19 +232,28 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                 level, kind, message = None, None, None
 
 
-def review_input_and_score(path_line_comments, warning_count):
+def review_input_and_score(path_line_comments, warning_count, changed_files):
     """
     Convert { PATH: { LINE: [COMMENT, ...] }, ... }, [11] to a gerrit
     ReviewInput() and score
     """
     review_comments = {}
+    extra_msg = ""
 
     for path, line_comments in path_line_comments.iteritems():
-        path_comments = []
-        for line, comment_list in line_comments.iteritems():
-            message = '\n'.join(comment_list)
-            path_comments.append({'line': line, 'message': message})
-        review_comments[path] = path_comments
+        logging.debug("path=%s", path)
+        logging.debug("changed_files=%s", changed_files)
+        if path in changed_files:
+            path_comments = []
+            for line, comment_list in line_comments.iteritems():
+                message = '\n'.join(comment_list)
+                path_comments.append({'line': line, 'message': message})
+            review_comments[path] = path_comments
+        else:
+            for line, comment_list in line_comments.iteritems():
+                if line > 0:
+                    message = '\n'.join(comment_list)
+                    extra_msg += "\n%s:%s:%s\n" % (path, line, message)
 
     if warning_count[0] > 0:
         score = -1
@@ -259,8 +268,8 @@ def review_input_and_score(path_line_comments, warning_count):
 
     if score < 0:
         return {
-            'message': ('%d style warning(s) for job %s\nPlease review %s'
-                        % (warning_count[0], BUILD_URL, STYLE_LINK)),
+            'message': ('%d style warning(s) for job %s\n%sPlease review %s'
+                        % (warning_count[0], BUILD_URL, extra_msg, STYLE_LINK)),
             'labels': {
                 'Code-Review': code_review_score
                 },
@@ -268,8 +277,8 @@ def review_input_and_score(path_line_comments, warning_count):
             'notify': 'OWNER',
             }, score
     return {
-        'message': 'No errors found in files by check patch. job %s' % \
-                   BUILD_URL,
+        'message': 'No errors found in files by check patch.%s job %s' % \
+                   (extra_msg, BUILD_URL),
         'notify': 'NONE',
         }, score
 
@@ -302,7 +311,7 @@ class Reviewer(object):
             return 'http://' + self.host + '/a' + path
         return 'https://' + self.host + '/a' + path
 
-    def _get(self, path):
+    def _get(self, path, decode=True):
         """
         GET path return Response.
         """
@@ -319,6 +328,11 @@ class Reviewer(object):
             self._error("cannot GET '%s': reason = %s, status_code = %d",
                         url, res.reason, res.status_code)
             return None
+        if decode:
+            content = res.content.decode(encoding="ascii")
+            self._debug("_get content: %s", content)
+            # Gerrit uses " )]}'" to guard against XSSI.
+            return json.loads(content[5:])
 
         return res
 
@@ -348,6 +362,19 @@ class Reviewer(object):
 
         return True
 
+    def get_files(self, change, revision='current'):
+        """
+        GET a dict with FileInfo for changed files
+        """
+        path = '/changes/' + change['id'] + '/revisions/' + revision + '/files'
+        self._debug("get_files_ = '%s'", path)
+
+        content = self._get(path)
+        if not content:
+            return None
+
+        return content
+
     def get_changes(self, query):
         """
         GET a list of ChangeInfo()s for all changes matching query.
@@ -365,8 +392,7 @@ class Reviewer(object):
         if not res:
             return []
 
-        # Gerrit uses " )]}'" to guard against XSSI.
-        return json.loads(res.content[5:])
+        return res
 
     def decode_patch(self, content):
         """
@@ -396,7 +422,7 @@ class Reviewer(object):
         """
         path = '/changes/' + change['id'] + '/revisions/' + revision + '/patch'
         self._debug("get_patch: path = '%s'", path)
-        res = self._get(path)
+        res = self._get(path, decode=False)
         if not res:
             return ''
 
@@ -416,7 +442,7 @@ class Reviewer(object):
             return self._post(path, review_input)
         return True
 
-    def check_patch(self, patch):
+    def check_patch(self, patch, changed_files):
         """
         Run each script in CHECKPATCH_PATHS on patch, return a
         ReviewInput() and score.
@@ -434,7 +460,8 @@ class Reviewer(object):
                         path, out[:80], err[:80])
             parse_checkpatch_output(out, path_line_comments, warning_count)
 
-        return review_input_and_score(path_line_comments, warning_count)
+        return review_input_and_score(path_line_comments, warning_count,
+                                      changed_files)
 
     def change_needs_review(self, change):
         """
@@ -478,7 +505,12 @@ class Reviewer(object):
             self._debug("review_change: no patch")
             return score
 
-        review_input, score = self.check_patch(patch)
+        changed_files = self.get_files(change, current_revision)
+        if not changed_files:
+            self._debug("review_change: no file list")
+            return score
+
+        review_input, score = self.check_patch(patch, changed_files)
         self._debug("review_change: score = %d", score)
         self.post_review(change, current_revision, review_input)
         return score

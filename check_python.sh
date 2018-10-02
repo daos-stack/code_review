@@ -57,11 +57,7 @@ if [ -n "${project_check_module}" ]; then
   # Must suppress issues being written to stdout.
     "${project_check_module}" > check_module.out
     if [ -e "${cm_pylint_out}" ]; then
-      file_list1=$(git "${git_args[@]}")
-      file_list=${file_list1//$'\n'/ }
-      for script_file in ${file_list}; do
-        grep "${script_file}" "${cm_pylint_out}"
-      done
+        grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
       popd
       exit 1
     fi
@@ -138,7 +134,6 @@ pushd "${PROJECT_REPO}" > /dev/null
           let rc=rc+$?
         fi
       fi
-      let rc=rc+$?
     else
       grep '^#!/bin/.*python' "${script_file}"
       if [ $? -eq 0 ]; then
