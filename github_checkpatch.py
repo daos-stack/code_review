@@ -231,11 +231,6 @@ def review_input_and_score(path_line_comments, warning_count):
     else:
         score = +1
     code_review_score = score
-    # removing this code. it does not look to do anything
-    # if you don't want check patch to post to the reviewers,
-    # need to remove 'labels'
-    #if not USE_CODE_REVIEW_SCORE:
-    #    code_review_score = 0
 
     if score < 0:
         return {
@@ -245,13 +240,8 @@ def review_input_and_score(path_line_comments, warning_count):
                 'Code-Review': code_review_score
                 },
             'comments': review_comments,
-            'notify': 'OWNER',
             }, score
-    return {
-        'message': 'No errors found in files by check patch. job %s' %
-                   BUILD_URL,
-        'notify': 'NONE',
-        }, score
+    return {}, score
 
 def add_patch_linenos(review_input, patch):
     """
@@ -329,7 +319,10 @@ class Reviewer(object):
         if not commit:
             print "Couldn't find commit"
             sys.exit(1)
-        review_comment = review_input['message']
+        try:
+            review_comment = review_input['message']
+        except KeyError:
+            review_comment = ""
         comments = []
         num_errors_non_in_patch = 0
 
@@ -346,12 +339,14 @@ class Reviewer(object):
                        # not a line modified in the patch, add it to the
                        # general message
                         if num_errors_non_in_patch < 1:
-                            review_comment += "\n\nFYI: Errors found in lines " \
+                            if review_comment != "":
+                                review_comment += "\n\n"
+                            review_comment += "FYI: Errors found in lines " \
                                               "not modified in the patch:\n"
-                        review_comment += "\n[{0}:{1}](https://github.com/daos-stack" \
-                                          "/daos/blob/{3}/{0}#L{1}):\n{2}".format(
-                                              path, comment['line'], comment['message'],
-                                              commit.sha)
+                            review_comment += "\n[{0}:{1}](https://github.com/daos-stack" \
+                                              "/daos/blob/{3}/{0}#L{1}):\n{2}".format(
+                                                  path, comment['line'], comment['message'],
+                                                  commit.sha)
                         num_errors_non_in_patch += 1
         except KeyError:
             pass
