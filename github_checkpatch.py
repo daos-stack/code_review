@@ -22,7 +22,7 @@
 #
 # Copyright (c) 2014-2018, Intel Corporation.
 #
-# Author: Brian J. Murrell <brian.murrell@interlinx.bc.ca>
+# Author: Brian J. Murrell <brian.murrell@intel.com>
 #   based on gerrit_checkpatch.py
 #
 """
@@ -319,35 +319,36 @@ class Reviewer(object):
         if not commit:
             print "Couldn't find commit"
             sys.exit(1)
-        try:
-            review_comment = review_input['message']
-        except KeyError:
-            review_comment = ""
+
         comments = []
-        num_errors_non_in_patch = 0
+        extra_annotations = ""
+        extra_review_comment = ""
 
         try:
+            num_annotations = 0
+            comments = []
             for path in review_input['comments']:
                 for comment in review_input['comments'][path]:
                     try:
-                        comments.append({
-                            "path": path,
-                            "position": comment['patch-line'],
-                            "body": comment['message']
-                        })
+                        if num_annotations < 31:
+                            comments.append({
+                                "path": path,
+                                "position": comment['patch-line'],
+                                "body": comment['message']
+                            })
+                        else:
+                            extra_annotations += "[{0}:{1}](https://github.com/daos-stack" \
+                                                "/daos/blob/{3}/{0}#L{1}): {2}".format(
+                                                    path, comment['line'], comment['message'],
+                                                    os.environ['GIT_COMMIT'])
+                        num_annotations += 1
                     except KeyError:
-                       # not a line modified in the patch, add it to the
-                       # general message
-                        if num_errors_non_in_patch < 1:
-                            if review_comment != "":
-                                review_comment += "\n\n"
-                            review_comment += "FYI: Errors found in lines " \
-                                              "not modified in the patch:\n"
-                            review_comment += "\n[{0}:{1}](https://github.com/daos-stack" \
-                                              "/daos/blob/{3}/{0}#L{1}):\n{2}".format(
-                                                  path, comment['line'], comment['message'],
-                                                  commit.sha)
-                        num_errors_non_in_patch += 1
+                        # not a line modified in the patch, add it to the
+                        # general message
+                        extra_review_comment += "[{0}:{1}](https://github.com/daos-stack" \
+                                                "/daos/blob/{3}/{0}#L{1}): {2}".format(
+                                                    path, comment['line'], comment['message'],
+                                                    commit.sha)
         except KeyError:
             pass
 
@@ -359,14 +360,38 @@ class Reviewer(object):
         except KeyError:
             event = "APPROVE"
 
-        res = self.pull_request.create_review(
-            commit,
-            review_comment,
-            event=event,
-            comments=comments)
-        print res
+        try:
+            review_comment = review_input['message']
+        except KeyError:
+            review_comment = ""
 
-        return True
+        if extra_annotations != "":
+            if review_comment != "":
+                review_comment += "\n\n"
+            review_comment += "Note: Error annotation limited to the first 30 "\
+                              "errors.  Remaining unannotated errors:\n" + \
+                              extra_annotations
+
+        if extra_review_comment != "":
+            if review_comment != "":
+                review_comment += "\n\n"
+            review_comment += "FYI: Errors found in lines "\
+                              "not modified in the patch:\n" + \
+                              extra_review_comment
+
+        # only post if running in Jenkins
+        if 'JENKINS_URL' in os.environ:
+            res = self.pull_request.create_review(
+                commit,
+                review_comment,
+                event=event,
+                comments=comments)
+            print res
+        else:
+            print commit
+            print review_comment
+            print event
+            print comments
 
     def check_patch(self, patch):
         """
