@@ -10,13 +10,9 @@
 # If this is a commit hook, it is expected the working directory
 # is at the base of the repository checkout.
 #
-if [ -z "${GIT_BRANCH}" ]; then
-  # Commit Hook
-  git_args=(ls-files --exclude-standard)
-else
-  # Review job
-  git_args=(diff-tree --name-only -r HEAD HEAD^)
-fi
+# shellcheck disable=SC1090
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"/git_args.sh
+read -r -a git_args <<< "$(git_args)"
 
 : "${PYLINT_OUT:="pylint.log"}"
 
@@ -40,7 +36,7 @@ repo=${PROJECT_REPO}
 # If the project has a check_modules.sh file, use it instead of the
 # default checks
 project_check_module=""
-pushd "${repo}" > /dev/null
+pushd "${repo}" > /dev/null || exit 1
 if [ -e "./check_modules.sh" ]; then
   project_check_module="./check_modules.sh"
 else
@@ -59,15 +55,15 @@ if [ -n "${project_check_module}" ]; then
     "${project_check_module}" > check_module.out
     if [ -s "${cm_pylint_out}" ]; then
       grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
-      popd
+      popd || exit 1
       exit 1
     else
       rm -f "${cm_pylint_out}"
     fi
-  popd
+  popd || exit 1
   exit 0
 fi
-popd
+popd || exit 1
 
 # Default checking
 pylint_rc="$(find "${repo}" -name pylint.rc -print -quit)"
@@ -92,7 +88,7 @@ if [ -n "${pylint3_rc}" ]; then
 fi
 
 rc=0
-pushd "${PROJECT_REPO}" > /dev/null
+pushd "${PROJECT_REPO}" > /dev/null || exit 1
   file_list1=$(git "${git_args[@]}")
 
   file_list=${file_list1//$'\n'/ }
@@ -111,6 +107,9 @@ pushd "${PROJECT_REPO}" > /dev/null
 
     IFS=" " read -r -a pylint_cmd <<< "${pylint} ${pyl_opts} ${script_file}"
     IFS=" " read -r -a pylint3_cmd <<< "${pylint} ${pyl3_opts} ${script_file}"
+    if [ ! -f "${script_file}" ]; then
+        continue
+    fi
     if [[ ${script_file} == *.py ]]; then
       # if there is a shebang use it.
       if grep '^#!/bin/.*python' "${script_file}"; then
@@ -157,5 +156,5 @@ pushd "${PROJECT_REPO}" > /dev/null
   if [ -e "${PYLINT_OUT}" ]; then
     grep ':' "${PYLINT_OUT}"
   fi
-popd > /dev/null
+popd > /dev/null || exit 1
 exit ${rc}

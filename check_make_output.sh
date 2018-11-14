@@ -7,13 +7,9 @@
 #   PROJECT_REPO is the directory for the source files.
 #      Needs to be set if is not the same directory as GERRIT_PROJECT
 
-if [ -z "${GIT_BRANCH}" ]; then
-  # Commit Hook
-  git_args=(ls-files --exclude-standard)
-else
-  # Review job
-  git_args=(diff-tree --name-only -r HEAD HEAD^)
-fi
+# shellcheck disable=SC1090
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"/git_args.sh
+read -r -a git_args <<< "$(git_args)"
 
 : "${MAKE_OUTPUT:="make_output"}"
 : "${GERRIT_PROJECT:="."}"
@@ -37,8 +33,8 @@ if [ ! -e "${MAKE_OUTPUT}" ]; then
 fi
 
 # Only output lines for the files in the review.
-pushd "${PROJECT_REPO}" >> /dev/null
+pushd "${PROJECT_REPO}" >> /dev/null || exit 1
   file_list1=$(git "${git_args[@]}")
-popd >> /dev/null
+popd >> /dev/null || exit 1
 file_list=${file_list1//$'\n'/|}
 grep -E "${file_list}" "${MAKE_OUTPUT}"

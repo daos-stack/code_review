@@ -10,13 +10,9 @@
 #
 
 # Only output lines for the files in the review.
-if [ -z "${GIT_BRANCH}" ]; then
-  # Commit Hook
-  git_args=(ls-files --exclude-standard)
-else
-  # Review job
-  git_args=(diff-tree --name-only -r HEAD HEAD^)
-fi
+# shellcheck disable=SC1090
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"/git_args.sh
+read -r -a git_args <<< "$(git_args)"
 
 : "${GERRIT_PROJECT:="."}"
 : "${PROJECT_REPO:="${GERRIT_PROJECT}"}"
@@ -34,7 +30,7 @@ if [ ! -d "${PROJECT_REPO}" ]; then
 fi
 
 rc=0
-pushd "${PROJECT_REPO}" > /dev/null
+pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
   file_list1=$(git "${git_args[@]}")
 
@@ -42,12 +38,13 @@ pushd "${PROJECT_REPO}" > /dev/null
 
   for script_file in ${file_list}; do
 
-    if [[ ${script_file} == *.sh ]] ||
-      grep -E '^#!/bin/(bash|sh)' "${script_file}"; then
+    if  [ -f "${script_file}" ] &&
+        ( [[ ${script_file} == *.sh ]] ||
+      grep -m 1 -E '^#!/bin/(bash|sh)' "${script_file}" ); then
       if ! shellcheck --format=gcc "${script_file}"; then
         (( rc=rc+PIPESTATUS[0] ))
       fi
     fi
   done
-popd > /dev/null
+popd > /dev/null || exit 1
 exit ${rc}
