@@ -317,7 +317,9 @@ class Reviewer(object):
             commit = None
 
         if not commit:
-            print "Couldn't find commit"
+            print "Couldn't find commit {} in:".format(os.environ['GIT_COMMIT'])
+            for commit in self.pull_request.get_commits():
+                print commit.sha
             sys.exit(1)
 
         comments = []
