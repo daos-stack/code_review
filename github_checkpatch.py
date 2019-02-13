@@ -320,6 +320,9 @@ class Reviewer(object):
             print "Couldn't find commit {} in:".format(os.environ['GIT_COMMIT'])
             for commit in self.pull_request.get_commits():
                 print commit.sha
+            print "Environment:"
+            for k in sorted(os.environ.keys()):
+                print "%s=%s" % (k, os.environ[k])
             sys.exit(1)
 
         comments = []
