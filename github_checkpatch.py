@@ -40,6 +40,7 @@ import sys
 import subprocess
 import re
 from github import Github
+from github import GithubException
 
 #pylint: disable=too-many-branches
 #pylint: disable=broad-except
@@ -386,12 +387,24 @@ class Reviewer(object):
 
         # only post if running in Jenkins
         if 'JENKINS_URL' in os.environ:
-            res = self.pull_request.create_review(
-                commit,
-                review_comment,
-                event=event,
-                comments=comments)
-            print res
+            try:
+                res = self.pull_request.create_review(
+                    commit,
+                    review_comment,
+                    event=event,
+                    comments=comments)
+                print res
+            except GithubException as excpn:
+                if excpn.status == 422:
+                    # rate-limited
+                    print "Attempt to post reivew was rate-limited"
+                    print "commit: " % commit
+                    print "review_comment: " % review_comment
+                    print "event: " % event
+                    print "comments: " % comments
+                    # intentionally falling out to the raise below
+                raise
+
         else:
             print commit
             print review_comment
