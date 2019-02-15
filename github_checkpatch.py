@@ -297,6 +297,7 @@ class Reviewer(object):
         gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'])
         repo = gh_context.get_repo("{0}/{1}".format(project, repo))
         self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
+        self.commits = self.pull_request.get_commits()
 
     def _debug(self, msg, *args):
         """_"""
@@ -312,14 +313,14 @@ class Reviewer(object):
         """
 
         commit = None
-        for commit in self.pull_request.get_commits():
+        for commit in self.commits:
             if commit.sha == os.environ['GIT_COMMIT']:
                 break
             commit = None
 
         if not commit:
             print "Couldn't find commit {} in:".format(os.environ['GIT_COMMIT'])
-            for commit in self.pull_request.get_commits():
+            for commit in self.commits:
                 print commit.sha
             print "Environment:"
             for k in sorted(os.environ.keys()):
@@ -444,7 +445,21 @@ class Reviewer(object):
         * POST review to github.
         """
         score = 1
-        patch = subprocess.check_output(["git", "diff", self.pull_request.base.sha])
+        try:
+            # the other option here is to simply fetch the patch
+            # from github at self.pull_request.diff_url which should
+            # be something like:
+            # "https://github.com/daos-stack/daos/pull/126.diff"
+            patch = subprocess.check_output(["git", "diff",
+                                             self.commits[0].parents[0].sha])
+        except subprocess.CalledProcessError as excpn:
+            if excpn.returncode == 128:
+                print """Got error 128 trying to run git diff.
+Was there a race with getting the base from the pull request?
+I.e. was a new revision of the patch pushed before we could get
+the pull request data on the previous one?"""
+            raise
+
         if not patch:
             self._debug("review_change: no patch")
             return score
