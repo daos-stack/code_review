@@ -360,17 +360,21 @@ class Reviewer(object):
             pass
 
         try:
+            review_comment = review_input['message']
+        except KeyError:
+            review_comment = ""
+
+        try:
             if review_input['labels']['Code-Review'] < 0:
                 event = "REQUEST_CHANGES"
             else:
                 event = "COMMENT"
+                if review_comment == "":
+                    review_comment = "LGTM"
         except KeyError:
             event = "COMMENT"
-
-        try:
-            review_comment = review_input['message']
-        except KeyError:
-            review_comment = ""
+            if review_comment == "":
+                review_comment = "LGTM"
 
         if extra_annotations != "":
             if review_comment != "":
@@ -399,7 +403,7 @@ class Reviewer(object):
                 if excpn.status == 422:
                     # rate-limited
                     print "Attempt to post reivew was rate-limited"
-                    print "commit: " % commit
+                    print "commit.sha: " % commit.sha
                     print "review_comment: " % review_comment
                     print "event: " % event
                     print "comments: " % comments
