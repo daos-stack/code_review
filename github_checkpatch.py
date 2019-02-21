@@ -363,9 +363,9 @@ class Reviewer(object):
             if review_input['labels']['Code-Review'] < 0:
                 event = "REQUEST_CHANGES"
             else:
-                event = "APPROVE"
+                event = "COMMENT"
         except KeyError:
-            event = "APPROVE"
+            event = "COMMENT"
 
         try:
             review_comment = review_input['message']
