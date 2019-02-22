@@ -43,6 +43,20 @@ import requests
 from github import Github
 from github import GithubException
 
+# need to monkey-patch the dismiss method until it's in a release
+def pygithub_dismiss(self, message):
+    """
+    :calls: `PUT /repos/:owner/:repo/pulls/:number/reviews/:review_id/dismissals <https://developer.github.com/v3/pulls/reviews/>`_
+    :rtype: None
+    """
+    assert isinstance(message, (str, unicode)), message
+    post_parameters = {'message': message}
+    headers, data = self._requester.requestJsonAndCheck(
+        "PUT",
+        self.pull_request_url + "/reviews/%s/dismissals" % self.id,
+        input=post_parameters
+    )
+
 #pylint: disable=too-many-branches
 #pylint: disable=broad-except
 
@@ -399,6 +413,16 @@ class Reviewer(object):
         # only post if running in Jenkins
         if 'JENKINS_URL' in os.environ and \
             os.environ.get('DISPLAY_RESULTS', 'false') == 'false':
+            # dismiss any previous reviews as they could have been requesting
+            # changes and this one could just be a comment (nothing wrong)
+            for review in self.pull_request.get_reviews():
+                if review.user.name.startswith("daosbuild") and \
+                   review.state == "CHANGES_REQUESTED":
+                    if not hasattr(review, 'dismiss'):
+                        # monkey patch the dismiss method in
+                        review.dismiss = pygithub_dismiss.__get__(review)
+                    review.dismiss("Updated patch")
+
             try:
                 res = self.pull_request.create_review(
                     commit,
