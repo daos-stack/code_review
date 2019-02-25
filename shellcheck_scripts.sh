@@ -32,9 +32,13 @@ fi
 rc=0
 pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
-  file_list1=$(git "${git_args[@]}")
+  if [ -n "$FILELIST" ]; then
+    file_list="$FILELIST"
+  else
+    file_list1=$(git "${git_args[@]}")
 
-  file_list=${file_list1//$'\n'/ }
+    file_list=${file_list1//$'\n'/ }
+  fi
 
   for script_file in ${file_list}; do
 

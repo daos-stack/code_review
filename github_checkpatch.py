@@ -39,6 +39,7 @@ import os
 import sys
 import subprocess
 import re
+import requests
 from github import Github
 from github import GithubException
 
@@ -75,7 +76,7 @@ USE_CODE_REVIEW_SCORE = False
 
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
-def parse_checkpatch_output(out, path_line_comments, warning_count):
+def parse_checkpatch_output(out, path_line_comments, warning_count, files):
     """
     Parse string output out of CHECKPATCH into path_line_comments.
     Increment warning_count[0] for each warning.
@@ -83,8 +84,10 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
     path_line_comments is { PATH: { LINE: [COMMENT, ...] }, ... }.
     """
     # pylint: disable=too-many-arguments
-    def add_comment(path, line, level, kind, tag, message):
+    def add_comment(path, line, level, kind, tag, message, in_files):
         """_"""
+        if path.startswith("./"):
+            path = path[2:]
         logging.debug("add_comment %s %d %s %s '%s'",
                       path, line, level, kind, message)
         if kind in CHECKPATCH_IGNORED_KINDS:
@@ -99,7 +102,8 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
         message_tag = tag
         line_comments.append('(%s) %s\n' % (message_tag, message))
 
-        warning_count[0] += 1
+        if in_files:
+            warning_count[0] += 1
 
     level = None    # 'ERROR', 'WARNING'
     kind = None     # 'CODE_INDENT', 'LEADING_SPACE', ...
@@ -134,8 +138,8 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
             line_number = int(line_number_str)
 
             if path and level and kind and message:
-                add_comment(path, line_number, level, kind, 'style', message)
-        elif not line[0].isalpha():
+                add_comment(path, line_number, level, kind, 'style', message, path in files)
+        elif not line[0].isalpha() and line[0] != '.':
             continue
         else:
             if not level:
@@ -196,7 +200,7 @@ def parse_checkpatch_output(out, path_line_comments, warning_count):
                         if lnumber.isdigit() and level and kind:
                             line_number = int(lnumber)
                             add_comment(path, line_number, level,
-                                        kind, code, message)
+                                        kind, code, message, path in files)
                             level = None
                             continue
                     except (ValueError, AttributeError):
@@ -292,10 +296,10 @@ class Reviewer(object):
     """
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        project, repo = os.environ['GIT_URL'].split('/')[-2:]
-        repo = repo[0:-4]
+        self.project, self.repo = os.environ['GIT_URL'].split('/')[-2:]
+        self.repo = self.repo[0:-4]
         gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'])
-        repo = gh_context.get_repo("{0}/{1}".format(project, repo))
+        repo = gh_context.get_repo("{0}/{1}".format(self.project, self.repo))
         self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
         self.commits = self.pull_request.get_commits()
 
@@ -344,18 +348,20 @@ class Reviewer(object):
                                 "body": comment['message']
                             })
                         else:
-                            extra_annotations += "[{0}:{1}](https://github.com/daos-stack" \
-                                                "/daos/blob/{3}/{0}#L{1}): {2}".format(
+                            extra_annotations += "[{0}:{1}](https://github.com/{4}" \
+                                                "/{5}/blob/{3}/{0}#L{1}): {2}".format(
                                                     path, comment['line'], comment['message'],
-                                                    os.environ['GIT_COMMIT'])
+                                                    os.environ['GIT_COMMIT'], self.project,
+                                                    self.repo)
                         num_annotations += 1
                     except KeyError:
-                        # not a line modified in the patch, add it to the
-                        # general message
-                        extra_review_comment += "[{0}:{1}](https://github.com/daos-stack" \
-                                                "/daos/blob/{3}/{0}#L{1}): {2}".format(
-                                                    path, comment['line'], comment['message'],
-                                                    commit.sha)
+                        if path in review_input['files']:
+                            # not a line modified in the patch, add it to the
+                            # general message
+                            extra_review_comment += "[{0}:{1}](https://github.com/{4}" \
+                                                    "/{5}/blob/{3}/{0}#L{1}): {2}".format(
+                                                        path, comment['line'], comment['message'],
+                                                        commit.sha, self.project, self.repo)
         except KeyError:
             pass
 
@@ -370,11 +376,11 @@ class Reviewer(object):
             else:
                 event = "COMMENT"
                 if review_comment == "":
-                    review_comment = "LGTM"
+                    review_comment = "LGTM.  No errors found by checkpatch"
         except KeyError:
             event = "COMMENT"
             if review_comment == "":
-                review_comment = "LGTM"
+                review_comment = "LGTM.  No errors found by checkpatch"
 
         if extra_annotations != "":
             if review_comment != "":
@@ -403,42 +409,48 @@ class Reviewer(object):
                 if excpn.status == 422:
                     # rate-limited
                     print "Attempt to post reivew was rate-limited"
-                    print "commit.sha: " % commit.sha
-                    print "review_comment: " % review_comment
-                    print "event: " % event
-                    print "comments: " % comments
+                    print "commit.sha: %s" % commit.sha
+                    print "review_comment: %s" % review_comment
+                    print "event: %s" % event
+                    print "comments: %s" % comments
                     # intentionally falling out to the raise below
                 raise
 
         else:
-            print commit
-            print review_comment
-            print event
-            print comments
+            import pprint
+            pprinter = pprint.PrettyPrinter(indent=4)
+            print "commit: ", commit
+            print "review_comment:\n", review_comment
+            print "event:", event
+            print "comments (%s):\n" % len(comments)
+            pprinter.pprint(comments)
 
-    def check_patch(self, patch):
+    def check_patch(self, patch, files):
         """
         Run each script in CHECKPATCH_PATHS on patch, return a
         ReviewInput() and score.
         """
         path_line_comments = {}
         warning_count = [0]
+        my_env = os.environ
+        my_env['FILELIST'] = ' '.join(files)
 
         for path in CHECKPATCH_PATHS:
             try:
                 pipe = subprocess.Popen([path] + CHECKPATCH_ARGS,
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE)
+                                        stderr=subprocess.PIPE,
+                                        env=my_env)
             except OSError as exception:
                 if exception.errno == 2:
                     print "Cound not find {0}".format(path)
                     sys.exit(1)
 
             out, err = pipe.communicate(patch)
-            self._debug("check_patch: path = %s, out = '%s...', err = '%s...'",
-                        path, out[:80], err[:80])
-            parse_checkpatch_output(out, path_line_comments, warning_count)
+            self._debug("check_patch: path = %s %s, out = '%s...', err = '%s...'",
+                        path, CHECKPATCH_ARGS, out[:80], err[:80])
+            parse_checkpatch_output(out, path_line_comments, warning_count, files)
 
         return review_input_and_score(path_line_comments, warning_count)
 
@@ -450,12 +462,26 @@ class Reviewer(object):
         """
         score = 1
         try:
-            # the other option here is to simply fetch the patch
-            # from github at self.pull_request.diff_url which should
-            # be something like:
-            # "https://github.com/daos-stack/daos/pull/126.diff"
-            patch = subprocess.check_output(["git", "diff",
-                                             self.commits[0].parents[0].sha])
+            # I am sure there has got to be a way to arrive at this
+            # patch from the local repo, ignoring merge commits, etc.
+            ##cmd = ["git", "diff", "{}..{}".format(self.commits[0].sha,
+            #                                      #self.commits[0].parents[0].sha)]
+            # this is pretty much what we want *except* we need to know
+            # know the name of the remote that the base.ref is in which
+            # makes it pretty unportable
+            # maybe we can revisit this all when we refactor for a git hook
+            #cmd = ["git", "diff", "origin/{}...HEAD".format(
+            #    self.pull_request.base.ref), '--stat']
+            #print cmd
+            #patch = subprocess.check_output(cmd)
+            # so for now, just use this simple (but lazy and inefficient)
+            # method
+            session = requests.Session()
+            url = "https://github.com/{}/{}/pull/{}.diff".format(self.project,
+                                                                 self.repo,
+                                                                 self.pull_request.number)
+            resp = session.get(url)
+            patch = resp.text
         except subprocess.CalledProcessError as excpn:
             if excpn.returncode == 128:
                 print """Got error 128 trying to run git diff.
@@ -464,11 +490,18 @@ I.e. was a new revision of the patch pushed before we could get
 the pull request data on the previous one?"""
             raise
 
+        files = set()
+        for line in patch.split('\n'):
+            if line.startswith("+++ b"):
+                filename = line.rstrip()[6:]
+                files.add(filename)
+
         if not patch:
             self._debug("review_change: no patch")
             return score
 
-        review_input, score = self.check_patch(patch)
+        review_input, score = self.check_patch(patch, files)
+        review_input['files'] = files
         self._debug("review_change: score = %d", score)
 
         # add patch line numbers to review_input
