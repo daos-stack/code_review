@@ -1,0 +1,11 @@
+#
+# Copyright 2019, Intel Corporation
+#
+#
+
+# Pull base image
+FROM centos:7
+MAINTAINER Brian J. Murrell <brian.murrell@intel.com>
+
+RUN yum install -y epel-release
+RUN yum install -y python-requests python-github perl ShellCheck git
