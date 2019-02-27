@@ -1,0 +1,26 @@
+commit f4e0ba4133a744ceb9ce60ad8bdf54b993fb330f
+Author: Brian J. Murrell <brian.murrell@intel.com>
+Date:   Wed Feb 27 07:34:44 2019 -0500
+
+    Add a shell linting error test file
+    
+    Signed-off-by: Brian J. Murrell <brian.murrell@intel.com>
+
+diff --git a/test/shell_error.sh b/test/shell_error.sh
+new file mode 100644
+index 0000000..13bf3c0
+--- /dev/null
++++ b/test/shell_error.sh
+@@ -0,0 +1,3 @@
++#!/bin/sh
++
++echo $STRING
+diff --git a/test/shell_noerror.sh b/test/shell_noerror.sh
+new file mode 100644
+index 0000000..da9b875
+--- /dev/null
++++ b/test/shell_noerror.sh
+@@ -0,0 +1,3 @@
++#!/bin/sh
++
++echo "$STRING"

@@ -376,11 +376,11 @@ class Reviewer(object):
             else:
                 event = "COMMENT"
                 if review_comment == "":
-                    review_comment = "LGTM.  No errors found by checkpatch"
+                    review_comment = "LGTM.  No errors found by checkpatch."
         except KeyError:
             event = "COMMENT"
             if review_comment == "":
-                review_comment = "LGTM.  No errors found by checkpatch"
+                review_comment = "LGTM.  No errors found by checkpatch."
 
         if extra_annotations != "":
             if review_comment != "":
@@ -397,7 +397,8 @@ class Reviewer(object):
                               extra_review_comment
 
         # only post if running in Jenkins
-        if 'JENKINS_URL' in os.environ:
+        if 'JENKINS_URL' in os.environ and \
+            os.environ.get('DISPLAY_RESULTS', 'false') == 'false':
             try:
                 res = self.pull_request.create_review(
                     commit,
@@ -434,6 +435,7 @@ class Reviewer(object):
         warning_count = [0]
         my_env = os.environ
         my_env['FILELIST'] = ' '.join(files)
+        self._debug("checking files: %s" % my_env['FILELIST'])
 
         for path in CHECKPATCH_PATHS:
             try:
@@ -444,7 +446,7 @@ class Reviewer(object):
                                         env=my_env)
             except OSError as exception:
                 if exception.errno == 2:
-                    print "Cound not find {0}".format(path)
+                    print "Could not find {0}".format(path)
                     sys.exit(1)
 
             out, err = pipe.communicate(patch)
@@ -462,26 +464,30 @@ class Reviewer(object):
         """
         score = 1
         try:
-            # I am sure there has got to be a way to arrive at this
-            # patch from the local repo, ignoring merge commits, etc.
-            ##cmd = ["git", "diff", "{}..{}".format(self.commits[0].sha,
-            #                                      #self.commits[0].parents[0].sha)]
-            # this is pretty much what we want *except* we need to know
-            # know the name of the remote that the base.ref is in which
-            # makes it pretty unportable
-            # maybe we can revisit this all when we refactor for a git hook
-            #cmd = ["git", "diff", "origin/{}...HEAD".format(
-            #    self.pull_request.base.ref), '--stat']
-            #print cmd
-            #patch = subprocess.check_output(cmd)
-            # so for now, just use this simple (but lazy and inefficient)
-            # method
-            session = requests.Session()
-            url = "https://github.com/{}/{}/pull/{}.diff".format(self.project,
-                                                                 self.repo,
-                                                                 self.pull_request.number)
-            resp = session.get(url)
-            patch = resp.text
+            if 'PATCHFILE' in os.environ:
+                self._debug("Using patch in file %s" % os.environ['PATCHFILE'])
+                patch = open(os.environ['PATCHFILE']).read()
+            else:
+                # I am sure there has got to be a way to arrive at this
+                # patch from the local repo, ignoring merge commits, etc.
+                ##cmd = ["git", "diff", "{}..{}".format(self.commits[0].sha,
+                #                                      #self.commits[0].parents[0].sha)]
+                # this is pretty much what we want *except* we need to know
+                # know the name of the remote that the base.ref is in which
+                # makes it pretty unportable
+                # maybe we can revisit this all when we refactor for a git hook
+                #cmd = ["git", "diff", "origin/{}...HEAD".format(
+                #    self.pull_request.base.ref), '--stat']
+                #print cmd
+                #patch = subprocess.check_output(cmd)
+                # so for now, just use this simple (but lazy and inefficient)
+                # method
+                session = requests.Session()
+                url = "https://github.com/{}/{}/pull/{}.diff".format(self.project,
+                                                                     self.repo,
+                                                                     self.pull_request.number)
+                resp = session.get(url)
+                patch = resp.text
         except subprocess.CalledProcessError as excpn:
             if excpn.returncode == 128:
                 print """Got error 128 trying to run git diff.
@@ -490,15 +496,15 @@ I.e. was a new revision of the patch pushed before we could get
 the pull request data on the previous one?"""
             raise
 
+        if not patch:
+            self._debug("review_change: no patch")
+            return score
+
         files = set()
         for line in patch.split('\n'):
             if line.startswith("+++ b"):
                 filename = line.rstrip()[6:]
                 files.add(filename)
-
-        if not patch:
-            self._debug("review_change: no patch")
-            return score
 
         review_input, score = self.check_patch(patch, files)
         review_input['files'] = files
