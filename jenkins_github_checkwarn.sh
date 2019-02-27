@@ -12,12 +12,12 @@ if [ -n "${GERRIT_PROJECT-}" ]; then
 else
   checkpatch_py="github_checkpatch.py"
 fi
-checkpatch_py="$(find "${mydir}" -name $checkpatch_py -print -quit)"
+checkpatch_py="$(find -L "${mydir}" -name $checkpatch_py -print -quit)"
 
-check_make="$(find "${mydir}" -name check_make_output.sh -print -quit)"
-check_style="$(find "${mydir}" -name checkpatch.pl -print -quit)"
-check_shell="$(find "${mydir}" -name shellcheck_scripts.sh -print -quit)"
-check_python="$(find "${mydir}" -name check_python.sh -print -quit)"
+check_make="$(find -L "${mydir}" -name check_make_output.sh -print -quit)"
+check_style="$(find -L "${mydir}" -name checkpatch.pl -print -quit)"
+check_shell="$(find -L "${mydir}" -name shellcheck_scripts.sh -print -quit)"
+check_python="$(find -L "${mydir}" -name check_python.sh -print -quit)"
 
 # For a matrix review we only want to default for the full check for the
 # el7 target, just compiler warnings for the rest.

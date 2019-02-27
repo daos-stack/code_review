@@ -33,8 +33,12 @@ if [ ! -e "${MAKE_OUTPUT}" ]; then
 fi
 
 # Only output lines for the files in the review.
-pushd "${PROJECT_REPO}" >> /dev/null || exit 1
-  file_list1=$(git "${git_args[@]}")
-popd >> /dev/null || exit 1
-file_list=${file_list1//$'\n'/|}
+if [ -n "$FILELIST" ]; then
+  file_list="$FILELIST"
+else
+  pushd "${PROJECT_REPO}" >> /dev/null || exit 1
+    file_list1=$(git "${git_args[@]}")
+  popd >> /dev/null || exit 1
+  file_list=${file_list1//$'\n'/|}
+fi
 grep -E "${file_list}" "${MAKE_OUTPUT}"
