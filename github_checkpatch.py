@@ -261,7 +261,12 @@ def add_patch_linenos(review_input, patch):
     for line in patch.split('\n'):
         if hunknum:
             patch_lineno += 1
-        if line.startswith("+++ b"):
+        if line.startswith("--- a/"):
+            filename = line.rstrip()[6:]
+        if line.startswith("+++ /dev/null"):
+            hunknum = 0
+            patch_lineno = 0
+        if line.startswith("+++ b/"):
             filename = line.rstrip()[6:]
             hunknum = 0
             patch_lineno = 0
@@ -285,7 +290,7 @@ def add_patch_linenos(review_input, patch):
             except KeyError:
                 pass
         # to debug line mapping
-        #print "{0} {1} {2}".format(patch_lineno, src_lineno, line)
+        #print "{} {} {} {}".format(patch_lineno, filename, src_lineno, line)
 
 class Reviewer(object):
     """
@@ -502,7 +507,8 @@ the pull request data on the previous one?"""
 
         files = set()
         for line in patch.split('\n'):
-            if line.startswith("+++ b"):
+            if line.startswith("--- a/") or \
+               line.startswith("+++ b/"):
                 filename = line.rstrip()[6:]
                 files.add(filename)
 
