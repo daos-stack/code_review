@@ -292,6 +292,9 @@ def add_patch_linenos(review_input, patch):
         # to debug line mapping
         #print "{} {} {} {}".format(patch_lineno, filename, src_lineno, line)
 
+class NotPullRequest(Exception):
+    pass
+
 class Reviewer(object):
     """
     * Pipe changeset through checkpatch.
@@ -305,7 +308,10 @@ class Reviewer(object):
         self.repo = self.repo[0:-4]
         gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'])
         repo = gh_context.get_repo("{0}/{1}".format(self.project, self.repo))
-        self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
+        try:
+            self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
+        except KeyError:
+            raise NotPullRequest
         self.commits = self.pull_request.get_commits()
 
     def _debug(self, msg, *args):
@@ -532,7 +538,10 @@ def main():
     """_"""
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-    reviewer = Reviewer()
+    try:
+        reviewer = Reviewer()
+    except NotPullRequest:
+        sys.exit(0)
 
     score = reviewer.update_single_change()
     if score > 0:
