@@ -275,7 +275,12 @@ def add_patch_linenos(review_input, patch):
     for line in patch.split('\n'):
         if hunknum:
             patch_lineno += 1
-        if line.startswith("+++ b"):
+        if line.startswith("--- a/"):
+            filename = line.rstrip()[6:]
+        if line.startswith("+++ /dev/null"):
+            hunknum = 0
+            patch_lineno = 0
+        if line.startswith("+++ b/"):
             filename = line.rstrip()[6:]
             hunknum = 0
             patch_lineno = 0
@@ -299,7 +304,10 @@ def add_patch_linenos(review_input, patch):
             except KeyError:
                 pass
         # to debug line mapping
-        #print "{0} {1} {2}".format(patch_lineno, src_lineno, line)
+        #print "{} {} {} {}".format(patch_lineno, filename, src_lineno, line)
+
+class NotPullRequest(Exception):
+    pass
 
 class Reviewer(object):
     """
@@ -314,7 +322,10 @@ class Reviewer(object):
         self.repo = self.repo[0:-4]
         gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'])
         repo = gh_context.get_repo("{0}/{1}".format(self.project, self.repo))
-        self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
+        try:
+            self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
+        except KeyError:
+            raise NotPullRequest
         self.commits = self.pull_request.get_commits()
 
     def _debug(self, msg, *args):
@@ -526,7 +537,8 @@ the pull request data on the previous one?"""
 
         files = set()
         for line in patch.split('\n'):
-            if line.startswith("+++ b"):
+            if line.startswith("--- a/") or \
+               line.startswith("+++ b/"):
                 filename = line.rstrip()[6:]
                 files.add(filename)
 
@@ -550,7 +562,10 @@ def main():
     """_"""
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-    reviewer = Reviewer()
+    try:
+        reviewer = Reviewer()
+    except NotPullRequest:
+        sys.exit(0)
 
     score = reviewer.update_single_change()
     if score > 0:
