@@ -351,6 +351,8 @@ class Reviewer(object):
             comments = []
             for path in review_input['comments']:
                 for comment in review_input['comments'][path]:
+                    if path not in review_input['files']:
+                        continue
                     try:
                         if num_annotations < 31:
                             comments.append({
@@ -366,13 +368,12 @@ class Reviewer(object):
                                                     self.repo)
                         num_annotations += 1
                     except KeyError:
-                        if path in review_input['files']:
-                            # not a line modified in the patch, add it to the
-                            # general message
-                            extra_review_comment += "[{0}:{1}](https://github.com/{4}" \
-                                                    "/{5}/blob/{3}/{0}#L{1}): {2}".format(
-                                                        path, comment['line'], comment['message'],
-                                                        commit.sha, self.project, self.repo)
+                        # not a line modified in the patch, add it to the
+                        # general message
+                        extra_review_comment += "[{0}:{1}](https://github.com/{4}" \
+                                                "/{5}/blob/{3}/{0}#L{1}): {2}".format(
+                                                    path, comment['line'], comment['message'],
+                                                    commit.sha, self.project, self.repo)
         except KeyError:
             pass
 
