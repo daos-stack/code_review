@@ -484,7 +484,7 @@ class Reviewer(object):
                     print "Could not find {0}".format(path)
                     sys.exit(1)
 
-            out, err = pipe.communicate(patch)
+            out, err = pipe.communicate(patch.encode('utf-8'))
             self._debug("check_patch: path = %s %s, out = '%s...', err = '%s...'",
                         path, CHECKPATCH_ARGS, out[:80], err[:80])
             parse_checkpatch_output(out, path_line_comments, warning_count, files)
