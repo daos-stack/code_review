@@ -428,7 +428,8 @@ class Reviewer(object):
             # dismiss any previous reviews as they could have been requesting
             # changes and this one could just be a comment (nothing wrong)
             for review in self.pull_request.get_reviews():
-                if review.user.name.startswith("daosbuild") and \
+                if review.user and review.user.name and \
+                   review.user.name.startswith("daosbuild") and \
                    review.state == "CHANGES_REQUESTED":
                     if not hasattr(review, 'dismiss'):
                         # monkey patch the dismiss method in
