@@ -40,6 +40,7 @@ import sys
 import subprocess
 import re
 import requests
+import ssl
 from github import Github
 from github import GithubException
 
@@ -277,13 +278,16 @@ def add_patch_linenos(review_input, patch):
             patch_lineno += 1
         if line.startswith("--- a/"):
             filename = line.rstrip()[6:]
+            continue
         if line.startswith("+++ /dev/null"):
             hunknum = 0
             patch_lineno = 0
+            continue
         if line.startswith("+++ b/"):
             filename = line.rstrip()[6:]
             hunknum = 0
             patch_lineno = 0
+            continue
         if line.startswith("@@ "):
             hunknum += 1
             matches = re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*', line)
@@ -307,6 +311,7 @@ def add_patch_linenos(review_input, patch):
         #print "{} {} {} {}".format(patch_lineno, filename, src_lineno, line)
 
 class NotPullRequest(Exception):
+    ''' An exception to signal that we are not in a PR'''
     pass
 
 class Reviewer(object):
@@ -425,6 +430,13 @@ class Reviewer(object):
         # only post if running in Jenkins
         if 'JENKINS_URL' in os.environ and \
             os.environ.get('DISPLAY_RESULTS', 'false') == 'false':
+            # Github has a comment size limit of 64K, so truncate
+            # we could post multiple comments but at a point where there
+            # 64K of comment, more is probably useless anyway
+            if len(review_comment) > 64*1024:
+                review_comment = review_comment[0:64*1024-80] +           \
+                                 "\n\nThere are more review comments but " \
+                                 "review comment truncated to 64K."
             # dismiss any previous reviews as they could have been requesting
             # changes and this one could just be a comment (nothing wrong)
             for review in self.pull_request.get_reviews():
@@ -436,24 +448,49 @@ class Reviewer(object):
                         review.dismiss = pygithub_dismiss.__get__(review)
                     review.dismiss("Updated patch")
 
-            try:
-                res = self.pull_request.create_review(
-                    commit,
-                    review_comment,
-                    event=event,
-                    comments=comments)
-                print res
-            except GithubException as excpn:
-                if excpn.status == 422:
-                    # rate-limited
-                    print "Attempt to post reivew was rate-limited"
-                    print "commit.sha: %s" % commit.sha
-                    print "review_comment: %s" % review_comment
-                    print "event: %s" % event
-                    print "comments: %s" % comments
-                    # intentionally falling out to the raise below
-                raise
-
+            tries = 0
+            while tries < 3:
+                tries += 1
+                try:
+                    res = self.pull_request.create_review(
+                        commit,
+                        review_comment,
+                        event=event,
+                        comments=comments)
+                    print res
+                    return
+                except ssl.SSLError as excpn:
+                    if excpn.message == 'The read operation timed out':
+                        continue
+                    print excpn
+                    raise
+                except GithubException as excpn:
+                    if excpn.status == 422:
+                        if excpn.data['errors'][0] == 'Position is invalid':
+                            print "Error parsing the patch and mapping to lines " \
+                                  "of code for annotation.  Please raise a "\
+                                  "ticket about this."
+                            print "Annotation data:"
+                            import pprint
+                            pprint.PrettyPrinter(indent=4).pprint(comments)
+                            return
+                        if excpn.data['errors'][0] == 'was submitted too quickly':
+                            # rate-limited
+                            print "Attempt to post too many annotations was " \
+                                  "rate-limited"
+                            print "commit.sha: %s" % commit.sha
+                            print "review_comment: %s" % review_comment
+                            print "event: %s" % event
+                            print "comments: %s" % comments
+                            print "Attempt to post too many annotations was " \
+                                  "rate-limited. See data above."
+                            return
+                        print "Unhandled 422 exception:"
+                        print "exception: %s" % excpn
+                        print "exception.status: %s" % excpn.status
+                        print "exception.data: %s" % excpn.data
+                        return
+                    raise
         else:
             import pprint
             pprinter = pprint.PrettyPrinter(indent=4)
