@@ -39,24 +39,30 @@ import os
 import sys
 import subprocess
 import re
-import requests
 import ssl
+import requests
 from github import Github
 from github import GithubException
 
 # need to monkey-patch the dismiss method until it's in a release
 def pygithub_dismiss(self, message):
+    # pylint: disable=line-too-long
     """
     :calls: `PUT /repos/:owner/:repo/pulls/:number/reviews/:review_id/dismissals <https://developer.github.com/v3/pulls/reviews/>`_
     :rtype: None
     """
+    # pylint: enable=line-too-long
     assert isinstance(message, (str, unicode)), message
     post_parameters = {'message': message}
+    # pylint: disable=unused-variable
+    # pylint: disable=protected-access
     headers, data = self._requester.requestJsonAndCheck(
         "PUT",
         self.pull_request_url + "/reviews/%s/dismissals" % self.id,
         input=post_parameters
     )
+    # pylint: enable=unused-variable
+    # pylint: disable=protected-access
 
 #pylint: disable=too-many-branches
 #pylint: disable=broad-except
@@ -365,6 +371,10 @@ class Reviewer(object):
         extra_annotations = ""
         extra_review_comment = ""
 
+        # I don't trust review_input['labels']['Code-Review'] at this point
+        # Since we have all of the data we need to determine score and are
+        # goint to iterate through it right now, figure it out here
+        score = 0
         try:
             num_annotations = 0
             comments = []
@@ -385,6 +395,7 @@ class Reviewer(object):
                                                     path, comment['line'], comment['message'],
                                                     os.environ['GIT_COMMIT'], self.project,
                                                     self.repo)
+                        score = -1
                         num_annotations += 1
                     except KeyError:
                         # not a line modified in the patch, add it to the
@@ -402,7 +413,7 @@ class Reviewer(object):
             review_comment = ""
 
         try:
-            if review_input['labels']['Code-Review'] < 0:
+            if score < 0:
                 event = "REQUEST_CHANGES"
             else:
                 event = "COMMENT"
@@ -476,12 +487,14 @@ class Reviewer(object):
                             return
                         if excpn.data['errors'][0] == 'was submitted too quickly':
                             # rate-limited
+                            #import pprint
                             print "Attempt to post too many annotations was " \
                                   "rate-limited"
                             print "commit.sha: %s" % commit.sha
                             print "review_comment: %s" % review_comment
                             print "event: %s" % event
-                            print "comments: %s" % comments
+                            print "comments:"
+                            #pprint.PrettyPrinter(indent=4).pprint(comments)
                             print "Attempt to post too many annotations was " \
                                   "rate-limited. See data above."
                             return
