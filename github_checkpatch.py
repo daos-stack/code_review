@@ -374,7 +374,7 @@ class Reviewer(object):
         # I don't trust review_input['labels']['Code-Review'] at this point
         # Since we have all of the data we need to determine score and are
         # goint to iterate through it right now, figure it out here
-        score = 0
+        score = 1
         try:
             num_annotations = 0
             comments = []
@@ -416,17 +416,11 @@ class Reviewer(object):
         except KeyError:
             review_comment = ""
 
-        try:
-            if score < 0:
-                event = "REQUEST_CHANGES"
-            else:
-                event = "COMMENT"
-                if review_comment == "":
-                    review_comment = "LGTM.  No errors found by checkpatch."
-        except KeyError:
+        if score < 0:
+            event = "REQUEST_CHANGES"
+        else:
             event = "COMMENT"
-            if review_comment == "":
-                review_comment = "LGTM.  No errors found by checkpatch."
+            review_comment = "LGTM.  No errors found by checkpatch."
 
         if extra_annotations != "":
             if review_comment != "":
@@ -473,7 +467,7 @@ class Reviewer(object):
                         event=event,
                         comments=comments)
                     print res
-                    return
+                    return score
                 except ssl.SSLError as excpn:
                     if excpn.message == 'The read operation timed out':
                         continue
@@ -488,7 +482,7 @@ class Reviewer(object):
                             print "Annotation data:"
                             import pprint
                             pprint.PrettyPrinter(indent=4).pprint(comments)
-                            return
+                            return score
                         if excpn.data['errors'][0] == 'was submitted too quickly':
                             # rate-limited
                             #import pprint
@@ -501,12 +495,12 @@ class Reviewer(object):
                             #pprint.PrettyPrinter(indent=4).pprint(comments)
                             print "Attempt to post too many annotations was " \
                                   "rate-limited. See data above."
-                            return
+                            return score
                         print "Unhandled 422 exception:"
                         print "exception: %s" % excpn
                         print "exception.status: %s" % excpn.status
                         print "exception.data: %s" % excpn.data
-                        return
+                        return score
                     raise
         else:
             import pprint
@@ -516,6 +510,8 @@ class Reviewer(object):
             print "event:", event
             print "comments (%s):\n" % len(comments)
             pprinter.pprint(comments)
+
+        return score
 
     def check_patch(self, patch, files):
         """
@@ -605,7 +601,7 @@ the pull request data on the previous one?"""
         # add patch line numbers to review_input
         add_patch_linenos(review_input, patch)
 
-        self.post_review(review_input)
+        score = self.post_review(review_input)
         return score
 
     def update_single_change(self):
