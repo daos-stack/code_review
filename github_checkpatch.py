@@ -41,6 +41,7 @@ import subprocess
 import re
 import ssl
 import requests
+import time
 from github import Github
 from github import GithubException
 
@@ -458,7 +459,8 @@ class Reviewer(object):
                     review.dismiss("Updated patch")
 
             tries = 0
-            while tries < 3:
+            max_tries = 4
+            while tries < max_tries:
                 tries += 1
                 try:
                     res = self.pull_request.create_review(
@@ -475,7 +477,15 @@ class Reviewer(object):
                     raise
                 except GithubException as excpn:
                     if excpn.status == 422:
-                        if excpn.data['errors'][0] == 'Position is invalid':
+                        if excpn.data['errors'][0] == 'Path is invalid':
+                            print "Tried to sumbit patch comments with a path " \
+                                  "that is not in the patch.  Please raise a "\
+                                  "ticket about this."
+                            print "Annotation data:"
+                            import pprint
+                            pprint.PrettyPrinter(indent=4).pprint(comments)
+                            return score
+                        elif excpn.data['errors'][0] == 'Position is invalid':
                             print "Error parsing the patch and mapping to lines " \
                                   "of code for annotation.  Please raise a "\
                                   "ticket about this."
@@ -483,25 +493,32 @@ class Reviewer(object):
                             import pprint
                             pprint.PrettyPrinter(indent=4).pprint(comments)
                             return score
-                        if excpn.data['errors'][0] == 'was submitted too quickly':
+                        elif excpn.data['errors'][0] == 'was submitted too quickly':
                             # rate-limited
                             #import pprint
                             print "Attempt to post too many annotations was " \
                                   "rate-limited"
-                            print "commit.sha: %s" % commit.sha
-                            print "review_comment: %s" % review_comment
-                            print "event: %s" % event
-                            print "comments:"
-                            #pprint.PrettyPrinter(indent=4).pprint(comments)
-                            print "Attempt to post too many annotations was " \
-                                  "rate-limited. See data above."
+                            if tries < max_tries + 1:
+                                print "Trying again in 60 seconds"
+                                time.sleep(60)
+                            else:
+                                print "commit.sha: %s" % commit.sha
+                                print "review_comment: %s" % review_comment
+                                print "event: %s" % event
+                                print "comments:"
+                                #pprint.PrettyPrinter(indent=4).pprint(comments)
+                                print "Attempt to post too many annotations was " \
+                                      "rate-limited. See data above."
+                                return score
+                        else:
+                            print "Unhandled 422 exception:"
+                            print "exception: %s" % excpn
+                            print "exception.status: %s" % excpn.status
+                            print "exception.data: %s" % excpn.data
                             return score
-                        print "Unhandled 422 exception:"
-                        print "exception: %s" % excpn
-                        print "exception.status: %s" % excpn.status
-                        print "exception.data: %s" % excpn.data
-                        return score
-                    raise
+                    else:
+                        raise
+            return score
         else:
             import pprint
             pprinter = pprint.PrettyPrinter(indent=4)
