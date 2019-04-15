@@ -20,7 +20,7 @@
 #
 # GPL HEADER END
 #
-# Copyright (c) 2014-2018, Intel Corporation.
+# Copyright (c) 2014-2019, Intel Corporation.
 #
 # Author: Brian J. Murrell <brian.murrell@intel.com>
 #   based on gerrit_checkpatch.py
