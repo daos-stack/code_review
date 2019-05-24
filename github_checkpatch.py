@@ -20,7 +20,7 @@
 #
 # GPL HEADER END
 #
-# Copyright (c) 2014-2018, Intel Corporation.
+# Copyright (c) 2014-2019, Intel Corporation.
 #
 # Author: Brian J. Murrell <brian.murrell@intel.com>
 #   based on gerrit_checkpatch.py
@@ -40,6 +40,7 @@ import sys
 import subprocess
 import re
 import ssl
+import time
 import requests
 from github import Github
 from github import GithubException
@@ -121,7 +122,7 @@ def parse_checkpatch_output(out, path_line_comments, warning_count, files):
         path_comments = path_line_comments.setdefault(path, {})
         line_comments = path_comments.setdefault(line, [])
         message_tag = tag
-        line_comments.append('(%s) %s\n' % (message_tag, message))
+        line_comments.append('(%s) %s' % (message_tag, message))
 
         if in_files:
             warning_count[0] += 1
@@ -331,7 +332,12 @@ class Reviewer(object):
         self.logger = logging.getLogger(__name__)
         self.project, self.repo = os.environ['GIT_URL'].split('/')[-2:]
         self.repo = self.repo[0:-4]
-        gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'])
+        # https://github.com/PyGithub/PyGithub/issues/693
+        # effectively, GH puts a timeout of 10s on API request processing but
+        # pygithub's default timeout is also 10s so pygithub can close the
+        # socket before GitHub has had a chance to send a 502 response
+        gh_context = Github(os.environ['GH_USER'], os.environ['GH_PASS'],
+                            timeout=15)
         repo = gh_context.get_repo("{0}/{1}".format(self.project, self.repo))
         try:
             self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
@@ -347,6 +353,77 @@ class Reviewer(object):
         """_"""
         self.logger.error(msg, *args)
 
+    def create_github_review(self, review_input, commit_sha, max_annotations=31):
+        """_"""
+        comments = []
+        extra_annotations = ""
+        extra_review_comment = ""
+
+        # I don't trust review_input['labels']['Code-Review'] at this point
+        # Since we have all of the data we need to determine score and are
+        # goint to iterate through it right now, figure it out here
+        score = 1
+        try:
+            num_annotations = 0
+            comments = []
+            for path in review_input['comments']:
+                for comment in review_input['comments'][path]:
+                    if path not in review_input['files']:
+                        continue
+                    try:
+                        if num_annotations < max_annotations:
+                            comments.append({
+                                "path": path,
+                                "position": comment['patch-line'],
+                                "body": comment['message']
+                            })
+                        else:
+                            extra_annotations += "\n[{0}:{1}](https://github.com/{4}" \
+                                                "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
+                                                    path, comment['line'], comment['message'],
+                                                    os.environ['GIT_COMMIT'], self.project,
+                                                    self.repo)
+                        score = -1
+                        num_annotations += 1
+                    except KeyError:
+                        # not a line modified in the patch, add it to the
+                        # general message
+                        extra_review_comment += "\n[{0}:{1}](https://github.com/{4}" \
+                                                "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
+                                                    path, comment['line'], comment['message'],
+                                                    commit_sha, self.project, self.repo)
+        except KeyError:
+            pass
+
+        try:
+            review_comment = review_input['message']
+        except KeyError:
+            review_comment = ""
+
+        if score < 0:
+            event = "REQUEST_CHANGES"
+        else:
+            event = "COMMENT"
+            review_comment = "LGTM.  No errors found by checkpatch."
+
+        if extra_annotations != "":
+            if review_comment != "":
+                review_comment += "\n\n"
+            review_comment += "Note: Error annotation limited to the " + \
+                              "first " + str(max_annotations) + \
+                              " errors.  Remaining unannotated errors:\n" + \
+                              extra_annotations
+
+        if extra_review_comment != "":
+            if review_comment != "":
+                review_comment += "\n\n"
+            review_comment += "FYI: Errors found in lines "\
+                              "not modified in the patch:\n" + \
+                              extra_review_comment
+
+        return score, event, comments, review_comment
+
+    # pylint: disable=too-many-return-statements
     def post_review(self, review_input):
         """
         POST review_input for the given revision of change.
@@ -367,70 +444,8 @@ class Reviewer(object):
                 print "%s=%s" % (k, os.environ[k])
             sys.exit(1)
 
-        comments = []
-        extra_annotations = ""
-        extra_review_comment = ""
-
-        # I don't trust review_input['labels']['Code-Review'] at this point
-        # Since we have all of the data we need to determine score and are
-        # goint to iterate through it right now, figure it out here
-        score = 1
-        try:
-            num_annotations = 0
-            comments = []
-            for path in review_input['comments']:
-                for comment in review_input['comments'][path]:
-                    if path not in review_input['files']:
-                        continue
-                    try:
-                        if num_annotations < 31:
-                            comments.append({
-                                "path": path,
-                                "position": comment['patch-line'],
-                                "body": comment['message']
-                            })
-                        else:
-                            extra_annotations += "[{0}:{1}](https://github.com/{4}" \
-                                                "/{5}/blob/{3}/{0}#L{1}): {2}".format(
-                                                    path, comment['line'], comment['message'],
-                                                    os.environ['GIT_COMMIT'], self.project,
-                                                    self.repo)
-                        score = -1
-                        num_annotations += 1
-                    except KeyError:
-                        # not a line modified in the patch, add it to the
-                        # general message
-                        extra_review_comment += "[{0}:{1}](https://github.com/{4}" \
-                                                "/{5}/blob/{3}/{0}#L{1}): {2}".format(
-                                                    path, comment['line'], comment['message'],
-                                                    commit.sha, self.project, self.repo)
-        except KeyError:
-            pass
-
-        try:
-            review_comment = review_input['message']
-        except KeyError:
-            review_comment = ""
-
-        if score < 0:
-            event = "REQUEST_CHANGES"
-        else:
-            event = "COMMENT"
-            review_comment = "LGTM.  No errors found by checkpatch."
-
-        if extra_annotations != "":
-            if review_comment != "":
-                review_comment += "\n\n"
-            review_comment += "Note: Error annotation limited to the first 30 "\
-                              "errors.  Remaining unannotated errors:\n" + \
-                              extra_annotations
-
-        if extra_review_comment != "":
-            if review_comment != "":
-                review_comment += "\n\n"
-            review_comment += "FYI: Errors found in lines "\
-                              "not modified in the patch:\n" + \
-                              extra_review_comment
+        score, event, comments, review_comment = \
+            self.create_github_review(review_input, commit.sha)
 
         # only post if running in Jenkins
         if 'JENKINS_URL' in os.environ and \
@@ -454,24 +469,48 @@ class Reviewer(object):
                     review.dismiss("Updated patch")
 
             tries = 0
-            while tries < 3:
+            max_tries = 4
+            while tries < max_tries:
                 tries += 1
                 try:
+                    self._debug("Creating review on try %s" % tries)
+                    if tries == max_tries -1:
+                        # on the last try remove all of the annotations to see
+                        # if it will post
+                        score, event, comments, review_comment = \
+                            self.create_github_review(review_input, commit.sha, 0)
+
+                        review_comment += "\n\nNote: Unable to provide any " \
+                                          "annotated comments due to GitHub " \
+                                          "API limitations."
+
                     res = self.pull_request.create_review(
                         commit,
                         review_comment,
                         event=event,
                         comments=comments)
-                    print res
+                    self._debug("Creating review on try %s complete: %s" % (tries, res))
+                    print "Successfully posted review after %s tries: %s " % \
+                          (tries, res)
                     return score
                 except ssl.SSLError as excpn:
+                    self._debug("Creating review on try %s got an SSLError" % tries)
                     if excpn.message == 'The read operation timed out':
                         continue
                     print excpn
                     raise
                 except GithubException as excpn:
+                    self._debug("Creating review on try %s got a GithubException" % tries)
                     if excpn.status == 422:
-                        if excpn.data['errors'][0] == 'Position is invalid':
+                        if excpn.data['errors'][0] == 'Path is invalid':
+                            print "Tried to sumbit patch comments with a path " \
+                                  "that is not in the patch.  Please raise a "\
+                                  "ticket about this."
+                            print "Annotation data:"
+                            import pprint
+                            pprint.PrettyPrinter(indent=4).pprint(comments)
+                            return score
+                        elif excpn.data['errors'][0] == 'Position is invalid':
                             print "Error parsing the patch and mapping to lines " \
                                   "of code for annotation.  Please raise a "\
                                   "ticket about this."
@@ -479,25 +518,48 @@ class Reviewer(object):
                             import pprint
                             pprint.PrettyPrinter(indent=4).pprint(comments)
                             return score
-                        if excpn.data['errors'][0] == 'was submitted too quickly':
+                        elif excpn.data['errors'][0] == 'was submitted too quickly':
                             # rate-limited
                             #import pprint
-                            print "Attempt to post too many annotations was " \
-                                  "rate-limited"
-                            print "commit.sha: %s" % commit.sha
-                            print "review_comment: %s" % review_comment
-                            print "event: %s" % event
-                            print "comments:"
-                            #pprint.PrettyPrinter(indent=4).pprint(comments)
-                            print "Attempt to post too many annotations was " \
-                                  "rate-limited. See data above."
+                            self._debug("Attempt to post was rate-limited")
+                            if tries < max_tries + 1:
+                                self._debug("Trying again in 60 seconds")
+                                time.sleep(60)
+                                self._debug("Done sleeping 422")
+                            else:
+                                self._debug("commit.sha: %s" % commit.sha)
+                                self._debug("review_comment: %s" % review_comment)
+                                self._debug("event: %s" % event)
+                                self._debug("comments:")
+                                #pprint.PrettyPrinter(indent=4).pprint(comments)
+                                self._debug("Attempt to post was rate-limited. " \
+                                            "See data above.")
+                                return score
+                        else:
+                            print "Unhandled 422 exception:"
+                            print "exception: %s" % excpn
+                            print "exception.status: %s" % excpn.status
+                            print "exception.data: %s" % excpn.data
                             return score
-                        print "Unhandled 422 exception:"
-                        print "exception: %s" % excpn
-                        print "exception.status: %s" % excpn.status
-                        print "exception.data: %s" % excpn.data
-                        return score
-                    raise
+                    if excpn.status == 502:
+                        if excpn.data['message'] == 'Server Error':
+                            self._debug("Got a 502 Server Error trying to post " \
+                                        "review.  Probably exceeded the 10s API " \
+                                        "time limit.  Will try again.")
+                            time.sleep(5)
+                            self._debug("Done sleeping 502")
+                        else:
+                            print "Unhandled 502 exception:"
+                            print "exception: %s" % excpn
+                            print "exception.status: %s" % excpn.status
+                            print "exception.data: %s" % excpn.data
+                            return score
+                    else:
+                        raise
+                self._debug("Bottom of while loop")
+            self._debug("Exited while loop")
+            print "Gave up trying to post the review after %s tries" % tries
+            return score
         else:
             import pprint
             pprinter = pprint.PrettyPrinter(indent=4)

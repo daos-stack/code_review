@@ -4,11 +4,13 @@ Style warning(s) for job ...
 Please review https://wiki.hpdd.intel.com/display/DC/Coding+Rules
 
 FYI: Errors found in lines not modified in the patch:
-[test/shell_error.sh:6](https://github.com/daos-stack/code_review/blob/.../test/shell_error.sh#L6): (lint) Double quote to prevent globbing and word splitting. [SC2086]
+
+[test/shell_error.sh:6](https://github.com/daos-stack/code_review/blob/.../test/shell_error.sh#L6):
+(lint) Double quote to prevent globbing and word splitting. [SC2086]
 
 event: REQUEST_CHANGES
 comments (1):
 
-[   {   'body': '(lint) Double quote to prevent globbing and word splitting. [SC2086]\n',
+[   {   'body': '(lint) Double quote to prevent globbing and word splitting. [SC2086]',
         'path': 'test/shell_error.sh',
         'position': 3}]
