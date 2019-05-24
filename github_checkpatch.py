@@ -388,10 +388,6 @@ class Reviewer(object):
                     except KeyError:
                         # not a line modified in the patch, add it to the
                         # general message
-                        # but not for Functional tests for the time being
-                        if path.startswith('src/tests/ftest') or \
-                           path.startswith('src/utils/py/'):
-                            continue
                         extra_review_comment += "\n[{0}:{1}](https://github.com/{4}" \
                                                 "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
                                                     path, comment['line'], comment['message'],
