@@ -389,8 +389,7 @@ class Reviewer(object):
                         # not a line modified in the patch, add it to the
                         # general message
                         # but not for Functional tests for the time being
-                        if path.startswith('src/tests/ftest') or \
-                           path.startswith('src/utils/py/'):
+                        if path == 'src/utils/py/daos_api.py':
                             continue
                         extra_review_comment += "\n[{0}:{1}](https://github.com/{4}" \
                                                 "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
@@ -488,14 +487,15 @@ class Reviewer(object):
                                           "annotated comments due to GitHub " \
                                           "API limitations."
 
-                    res = self.pull_request.create_review(
-                        commit,
-                        review_comment,
-                        event=event,
-                        comments=comments)
-                    self._debug("Creating review on try %s complete: %s" % (tries, res))
-                    print "Successfully posted review after %s tries: %s " % \
-                          (tries, res)
+                    if event != "COMMENT":
+                        res = self.pull_request.create_review(
+                            commit,
+                            review_comment,
+                            event=event,
+                            comments=comments)
+                        self._debug("Creating review on try %s complete: %s" % (tries, res))
+                        print "Successfully posted review after %s tries: %s " % \
+                              (tries, res)
                     return score
                 except ssl.SSLError as excpn:
                     self._debug("Creating review on try %s got an SSLError" % tries)
