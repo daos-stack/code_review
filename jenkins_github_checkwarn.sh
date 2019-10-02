@@ -2,7 +2,7 @@
 
 # comma separated list
 def_ignore="SPLIT_STRING,SSCANF_TO_KSTRTO,PREFER_KERNEL_TYPES,BRACES"
-def_ignore+=",USE_NEGATIVE_ERRNO,CAMELCASE"
+def_ignore+=",USE_NEGATIVE_ERRNO,CAMELCASE,STATIC_CONST_CHAR_ARRAY"
 
 : "${IGNORE:="${def_ignore}"}"
 
