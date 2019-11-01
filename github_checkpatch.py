@@ -42,7 +42,7 @@ import re
 import ssl
 import time
 import requests
-from colletions import OrderedDict
+from collections import OrderedDict
 from github import Github
 from github import GithubException
 
