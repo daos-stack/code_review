@@ -61,11 +61,11 @@ if [ -n "${project_check_module}" ]; then
   else
       rm -f "${cm_pylint_out}"
   fi
-  if [ $rc != 0 ]; then
+  if [ "$rc" != 0 ]; then
       echo "Critical error running ${project_check_module}"
       echo command output was
       cat check_module.out
-      exit $rc
+      exit ${rc}
   fi
   popd || exit 1
   exit 0
