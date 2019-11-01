@@ -52,14 +52,21 @@ if [ -n "${project_check_module}" ]; then
   cm_pylint_out="${PWD}/pylint.log"
   rm -f "${cm_pylint_out}"
   # Must suppress issues being written to stdout.
-    "${project_check_module}" > check_module.out
-    if [ -s "${cm_pylint_out}" ]; then
+  "${project_check_module}" > check_module.out
+  rc = $?
+  if [ -s "${cm_pylint_out}" ]; then
       grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
       popd || exit 1
       exit 1
-    else
+  else
       rm -f "${cm_pylint_out}"
-    fi
+  fi
+  if [ $rc != 0 ]; then
+      echo "Critical error running ${cm_pylint_out}"
+      echo command output was
+      cat check_module.out
+      exit $rc
+  fi
   popd || exit 1
   exit 0
 fi

@@ -388,9 +388,6 @@ class Reviewer(object):
                     except KeyError:
                         # not a line modified in the patch, add it to the
                         # general message
-                        # but not for Functional tests for the time being
-                        if path == 'src/utils/py/daos_api.py':
-                            continue
                         extra_review_comment += "\n[{0}:{1}](https://github.com/{4}" \
                                                 "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
                                                     path, comment['line'], comment['message'],
@@ -600,7 +597,7 @@ class Reviewer(object):
 
             out, err = pipe.communicate(patch.encode('utf-8'))
             self._debug("check_patch: path = %s %s, out = '%s...', err = '%s...'",
-                        path, CHECKPATCH_ARGS, out[:80], err[:80])
+                        path, CHECKPATCH_ARGS, out[:80], err)
             parse_checkpatch_output(out, path_line_comments, warning_count, files)
 
         return review_input_and_score(path_line_comments, warning_count)
