@@ -671,7 +671,7 @@ the pull request data on the previous one?"""
 
 def main():
     """_"""
-    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s %(name)s %(message)s', level=logging.DEBUG)
 
     try:
         reviewer = Reviewer()
