@@ -53,7 +53,7 @@ if [ -n "${project_check_module}" ]; then
   rm -f "${cm_pylint_out}"
   # Must suppress issues being written to stdout.
   "${project_check_module}" > check_module.out
-  rc = $?
+  rc=$?
   if [ -s "${cm_pylint_out}" ]; then
       grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
       popd || exit 1
