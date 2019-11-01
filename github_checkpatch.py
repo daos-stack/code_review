@@ -42,6 +42,7 @@ import re
 import ssl
 import time
 import requests
+from colletions import orderedDict
 from github import Github
 from github import GithubException
 
@@ -119,7 +120,7 @@ def parse_checkpatch_output(out, path_line_comments, warning_count, files):
             if fnmatch.fnmatch(path, pattern):
                 return
 
-        path_comments = path_line_comments.setdefault(path, {})
+        path_comments = path_line_comments.setdefault(path, orderedDict())
         line_comments = path_comments.setdefault(line, [])
         message_tag = tag
         line_comments.append('(%s) %s' % (message_tag, message))
@@ -244,7 +245,7 @@ def review_input_and_score(path_line_comments, warning_count):
     Convert { PATH: { LINE: [COMMENT, ...] }, ... }, [11] to a
     ReviewInput() and score
     """
-    review_comments = {}
+    review_comments = ordererdDict()
 
     for path, line_comments in path_line_comments.iteritems():
         path_comments = []
@@ -578,7 +579,7 @@ class Reviewer(object):
         Run each script in CHECKPATCH_PATHS on patch, return a
         ReviewInput() and score.
         """
-        path_line_comments = {}
+        path_line_comments = orderedDict()
         warning_count = [0]
         my_env = os.environ
         my_env['FILELIST'] = ' '.join(files)
