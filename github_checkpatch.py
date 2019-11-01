@@ -245,7 +245,7 @@ def review_input_and_score(path_line_comments, warning_count):
     Convert { PATH: { LINE: [COMMENT, ...] }, ... }, [11] to a
     ReviewInput() and score
     """
-    review_comments = OrdererdDict()
+    review_comments = OrdereredDict()
 
     for path, line_comments in path_line_comments.iteritems():
         path_comments = []
