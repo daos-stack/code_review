@@ -53,7 +53,7 @@ if [ -n "${project_check_module}" ]; then
   rm -f "${cm_pylint_out}"
   # Must suppress issues being written to stdout.
   "${project_check_module}" > check_module.out
-  rc=$?
+  rc=${PIPESTATUS[0]}
   if [ -s "${cm_pylint_out}" ]; then
       grep -E ".+:[[:digit:]]+:.+:.+" "${cm_pylint_out}"
       popd || exit 1
@@ -62,7 +62,7 @@ if [ -n "${project_check_module}" ]; then
       rm -f "${cm_pylint_out}"
   fi
   if [ $rc != 0 ]; then
-      echo "Critical error running ${cm_pylint_out}"
+      echo "Critical error running ${project_check_module}"
       echo command output was
       cat check_module.out
       exit $rc
