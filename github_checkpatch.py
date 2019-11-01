@@ -42,7 +42,7 @@ import re
 import ssl
 import time
 import requests
-from colletions import orderedDict
+from colletions import OrderedDict
 from github import Github
 from github import GithubException
 
@@ -120,7 +120,7 @@ def parse_checkpatch_output(out, path_line_comments, warning_count, files):
             if fnmatch.fnmatch(path, pattern):
                 return
 
-        path_comments = path_line_comments.setdefault(path, orderedDict())
+        path_comments = path_line_comments.setdefault(path, OrderedDict())
         line_comments = path_comments.setdefault(line, [])
         message_tag = tag
         line_comments.append('(%s) %s' % (message_tag, message))
@@ -579,7 +579,7 @@ class Reviewer(object):
         Run each script in CHECKPATCH_PATHS on patch, return a
         ReviewInput() and score.
         """
-        path_line_comments = orderedDict()
+        path_line_comments = OrderedDict()
         warning_count = [0]
         my_env = os.environ
         my_env['FILELIST'] = ' '.join(files)
