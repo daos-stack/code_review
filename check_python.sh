@@ -65,7 +65,7 @@ if [ -n "${project_check_module}" ]; then
       echo "Critical error running ${project_check_module}"
       echo command output was
       cat check_module.out
-      exit ${rc}
+      exit 1
   fi
   popd || exit 1
   exit 0
