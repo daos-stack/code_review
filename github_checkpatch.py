@@ -330,6 +330,7 @@ class Reviewer(object):
     """
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
         self.project, self.repo = os.environ['GIT_URL'].split('/')[-2:]
         self.repo = self.repo[0:-4]
         # https://github.com/PyGithub/PyGithub/issues/693
@@ -671,7 +672,7 @@ the pull request data on the previous one?"""
 
 def main():
     """_"""
-    logging.basicConfig(format='%(asctime)s %(name)s %(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s %(name)s %(message)s', level=logging.INFO)
 
     try:
         reviewer = Reviewer()
