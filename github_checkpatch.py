@@ -41,8 +41,8 @@ import subprocess
 import re
 import ssl
 import time
-import requests
 from collections import OrderedDict
+import requests
 from github import Github
 from github import GithubException
 
@@ -245,7 +245,7 @@ def review_input_and_score(path_line_comments, warning_count):
     Convert { PATH: { LINE: [COMMENT, ...] }, ... }, [11] to a
     ReviewInput() and score
     """
-    review_comments = OrdereredDict()
+    review_comments = OrderedDict()
 
     for path, line_comments in path_line_comments.iteritems():
         path_comments = []
