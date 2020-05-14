@@ -81,6 +81,7 @@ BUILD_URL = os.getenv('BUILD_URL', None)
 
 CHECKPATCH_ARGS = []
 try:
+    # Dont allow common spelling mistakes.
     import codespell_lib
     CHECKPATCH_ARGS.extend(['--codespell',
                             '--codespellfile',
