@@ -80,8 +80,10 @@ def _getenv_list(key, default=None, sep=':'):
 BUILD_URL = os.getenv('BUILD_URL', None)
 
 CHECKPATCH_ARGS = []
+
+# Try to use codespell if it's available.  This works for at least
+# 1.16 and 1.17.
 try:
-    # Dont allow common spelling mistakes.
     import codespell_lib._codespell
     try:
         d_file = codespell_lib._codespell.default_dictionary
