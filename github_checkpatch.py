@@ -83,10 +83,16 @@ CHECKPATCH_ARGS = []
 try:
     # Dont allow common spelling mistakes.
     import codespell_lib
+    try:
+        d_file = codespell_lib.default_dictionary
+    except AttributeError:
+        d_file = os.path.join(codespell_lib._data_root,
+                                         'dictionary.txt')
+
     CHECKPATCH_ARGS.extend(['--codespell',
                             '--codespellfile',
-                            os.path.join(codespell_lib._data_root,
-                                         'dictionary.txt')])
+                            d_file])
+
 except ImportError:
     pass
 

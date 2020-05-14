@@ -71,6 +71,7 @@ pipeline {
                     }
                     steps {
                         checkPatch review_creds: 'daos-jenkins-review-posting',
+                                   branch: "ampittma-codespell",
                                    ignored_files: "test/*"
                     }
                     post {
