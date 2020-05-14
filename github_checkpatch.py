@@ -79,9 +79,19 @@ def _getenv_list(key, default=None, sep=':'):
 
 BUILD_URL = os.getenv('BUILD_URL', None)
 
+CHECKPATCH_ARGS = []
+try:
+    import codespell_lib
+    CHECKPATCH_ARGS.extend(['--codespell',
+                            '--codespellfile',
+                            os.path.join(codespell_lib._data_root,
+                                         'dictionary.txt')])
+except ImportError:
+    pass
 
 CHECKPATCH_PATHS = _getenv_list('CHECKPATCH_PATHS', ['checkpatch.pl'])
-CHECKPATCH_ARGS = os.getenv('CHECKPATCH_ARGS', '--show-types -').split(' ')
+CHECKPATCH_EXTRA_ARGS = os.getenv('CHECKPATCH_ARGS', '--show-types -').split(' ')
+CHECKPATCH_ARGS.extend(CHECKPATCH_EXTRA_ARGS)
 CHECKPATCH_IGNORED_FILES = _getenv_list('CHECKPATCH_IGNORED_FILES', [
     'lustre/contrib/wireshark/packet-lustre.c',
     'lustre/ptlrpc/wiretest.c',
