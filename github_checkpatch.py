@@ -82,12 +82,12 @@ BUILD_URL = os.getenv('BUILD_URL', None)
 CHECKPATCH_ARGS = []
 try:
     # Dont allow common spelling mistakes.
-    import codespell_lib
+    import codespell_lib._codespell
     try:
-        d_file = codespell_lib.default_dictionary
+        d_file = codespell_lib._codespell.default_dictionary
     except AttributeError:
-        d_file = os.path.join(codespell_lib._data_root,
-                                         'dictionary.txt')
+        d_file = os.path.join(codespell_lib._codespell._data_root,
+                              'dictionary.txt')
 
     CHECKPATCH_ARGS.extend(['--codespell',
                             '--codespellfile',
