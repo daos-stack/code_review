@@ -79,9 +79,28 @@ def _getenv_list(key, default=None, sep=':'):
 
 BUILD_URL = os.getenv('BUILD_URL', None)
 
+CHECKPATCH_ARGS = []
+
+# Try to use codespell if it's available.  This works for at least
+# 1.16 and 1.17.
+try:
+    import codespell_lib._codespell
+    try:
+        d_file = codespell_lib._codespell.default_dictionary
+    except AttributeError:
+        d_file = os.path.join(codespell_lib._codespell._data_root,
+                              'dictionary.txt')
+
+    CHECKPATCH_ARGS.extend(['--codespell',
+                            '--codespellfile',
+                            d_file])
+
+except ImportError:
+    pass
 
 CHECKPATCH_PATHS = _getenv_list('CHECKPATCH_PATHS', ['checkpatch.pl'])
-CHECKPATCH_ARGS = os.getenv('CHECKPATCH_ARGS', '--show-types -').split(' ')
+CHECKPATCH_EXTRA_ARGS = os.getenv('CHECKPATCH_ARGS', '--show-types -').split(' ')
+CHECKPATCH_ARGS.extend(CHECKPATCH_EXTRA_ARGS)
 CHECKPATCH_IGNORED_FILES = _getenv_list('CHECKPATCH_IGNORED_FILES', [
     'lustre/contrib/wireshark/packet-lustre.c',
     'lustre/ptlrpc/wiretest.c',
