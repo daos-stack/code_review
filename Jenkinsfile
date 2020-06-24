@@ -131,7 +131,7 @@ pipeline {
                         ./jenkins_github_checkwarn.sh |
                           sed -e '/^commit:/s/".*"/"..."/' \
                               -e 's/blob\\/.*\\/test/blob\\/...\\/test/' \
-                              -e '/^Style warning(s) for job/s/https.*/.../' > "\$tmpfile"
+                              -e '/ Style warning(s) for job/s/https.*/.../' > "\$tmpfile"
 
                         diff -u "\$tmpfile" test/expected_output"""
                 }

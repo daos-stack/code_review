@@ -258,7 +258,7 @@ our $Ident	= qr{
 			[A-Za-z_][A-Za-z\d_]*
 			(?:\s*\#\#\s*[A-Za-z_][A-Za-z\d_]*)*
 		}x;
-our $Storage	= qr{extern|static|asmlinkage};
+our $Storage	= qr{extern|static|asmlinkage|ATOMIC};
 our $Sparse	= qr{
 			__user|
 			__kernel|
@@ -612,6 +612,9 @@ our $declaration_macros = qr{(?x:
 	(?:$Storage\s+)?(?:[A-Z_][A-Z0-9]*_){0,2}(?:DEFINE|DECLARE)(?:_[A-Z0-9]+){1,6}\s*\(|
 	(?:$Storage\s+)?LIST_HEAD\s*\(|
 	(?:$Storage\s+)?TAILQ_ENTRY\s*\(|
+	(?:$Storage\s+)?TAILQ_HEAD\s*\(|
+	(?:$Storage\s+)?D_CIRCLEQ_HEAD\s*\(|
+	(?:$Storage\s+)?CIRCLEQ_HEAD\s*\(|
 	(?:$Storage\s+)?STAILQ_ENTRY\s*\(|
 	(?:$Storage\s+)?LIST_ENTRY\s*\(|
 	(?:$Storage\s+)?${Type}\s+uninitialized_var\s*\(

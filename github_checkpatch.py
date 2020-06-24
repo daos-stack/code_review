@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 #
 # GPL HEADER START
 #
@@ -42,28 +42,53 @@ import re
 import ssl
 import time
 import requests
+import github
 from github import Github
 from github import GithubException
 
-# need to monkey-patch the dismiss method until it's in a release
-def pygithub_dismiss(self, message):
-    # pylint: disable=line-too-long
-    """
-    :calls: `PUT /repos/:owner/:repo/pulls/:number/reviews/:review_id/dismissals <https://developer.github.com/v3/pulls/reviews/>`_
-    :rtype: None
-    """
-    # pylint: enable=line-too-long
-    assert isinstance(message, (str, unicode)), message
-    post_parameters = {'message': message}
-    # pylint: disable=unused-variable
-    # pylint: disable=protected-access
-    headers, data = self._requester.requestJsonAndCheck(
-        "PUT",
-        self.pull_request_url + "/reviews/%s/dismissals" % self.id,
-        input=post_parameters
-    )
-    # pylint: enable=unused-variable
-    # pylint: disable=protected-access
+# Monkey-patch in the comfort-fade header.
+def pygithub_create_review2(
+        self,
+        commit=github.GithubObject.NotSet,
+        body=github.GithubObject.NotSet,
+        event=github.GithubObject.NotSet,
+        comments=github.GithubObject.NotSet,
+    ):
+        """
+        :calls: `POST /repos/:owner/:repo/pulls/:number/reviews <https://developer.github.com/v3/pulls/reviews/>`_
+        :param commit: github.Commit.Commit
+        :param body: string
+        :param event: string
+        :param comments: list
+        :rtype: :class:`github.PullRequestReview.PullRequestReview`
+        """
+        assert commit is github.GithubObject.NotSet or isinstance(
+            commit, github.Commit.Commit
+        ), commit
+        assert body is github.GithubObject.NotSet or isinstance(body, str), body
+        assert event is github.GithubObject.NotSet or isinstance(event, str), event
+        assert comments is github.GithubObject.NotSet or isinstance(
+            comments, list
+        ), comments
+        post_parameters = dict()
+        if commit is not github.GithubObject.NotSet:
+            post_parameters["commit_id"] = commit.sha
+        if body is not github.GithubObject.NotSet:
+            post_parameters["body"] = body
+        post_parameters["event"] = (
+            "COMMENT" if event == github.GithubObject.NotSet else event
+        )
+        if comments is github.GithubObject.NotSet:
+            post_parameters["comments"] = []
+        else:
+            post_parameters["comments"] = comments
+        headers, data = self._requester.requestJsonAndCheck(
+            "POST", self.url + "/reviews", input=post_parameters,
+            headers={"Accept": 'application/vnd.github.comfort-fade-preview+json'},
+        )
+        return github.PullRequestReview.PullRequestReview(
+            self._requester, headers, data, completed=True
+        )
 
 #pylint: disable=too-many-branches
 #pylint: disable=broad-except
@@ -80,23 +105,6 @@ def _getenv_list(key, default=None, sep=':'):
 BUILD_URL = os.getenv('BUILD_URL', None)
 
 CHECKPATCH_ARGS = []
-
-# Try to use codespell if it's available.  This works for at least
-# 1.16 and 1.17.
-try:
-    import codespell_lib._codespell
-    try:
-        d_file = codespell_lib._codespell.default_dictionary
-    except AttributeError:
-        d_file = os.path.join(codespell_lib._codespell._data_root,
-                              'dictionary.txt')
-
-    CHECKPATCH_ARGS.extend(['--codespell',
-                            '--codespellfile',
-                            d_file])
-
-except ImportError:
-    pass
 
 CHECKPATCH_PATHS = _getenv_list('CHECKPATCH_PATHS', ['checkpatch.pl'])
 CHECKPATCH_EXTRA_ARGS = os.getenv('CHECKPATCH_ARGS', '--show-types -').split(' ')
@@ -265,9 +273,9 @@ def review_input_and_score(path_line_comments, warning_count):
     """
     review_comments = {}
 
-    for path, line_comments in path_line_comments.iteritems():
+    for path, line_comments in path_line_comments.items():
         path_comments = []
-        for line, comment_list in line_comments.iteritems():
+        for line, comment_list in line_comments.items():
             message = '\n'.join(comment_list)
             path_comments.append({'line': line, 'message': message})
         review_comments[path] = path_comments
@@ -311,6 +319,7 @@ def add_patch_linenos(review_input, patch):
             continue
         if line.startswith("+++ b/"):
             filename = line.rstrip()[6:]
+#            review_input['files'].add(filename)
             hunknum = 0
             patch_lineno = 0
             continue
@@ -318,7 +327,7 @@ def add_patch_linenos(review_input, patch):
             hunknum += 1
             matches = re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*', line)
             if not matches:
-                print "error parsing ", line
+                print("error parsing ", line)
                 sys.exit(1)
             new_start_line = matches.group(3)
             src_lineno = int(new_start_line) - 1
@@ -330,11 +339,14 @@ def add_patch_linenos(review_input, patch):
             try:
                 for comment in review_input['comments'][filename]:
                     if comment['line'] == src_lineno:
-                        comment['patch-line'] = patch_lineno
+                        comment['in-patch'] = True
+                    if 'start_line' in comment:
+                        if src_lineno >= comment['start_line'] and src_lineno <= comment['line']:
+                            comment['in-patch'] = True
             except KeyError:
                 pass
         # to debug line mapping
-        #print "{} {} {} {}".format(patch_lineno, filename, src_lineno, line)
+        #print("{} {} {} {}".format(patch_lineno, filename, src_lineno, line))
 
 class NotPullRequest(Exception):
     ''' An exception to signal that we are not in a PR'''
@@ -360,9 +372,14 @@ class Reviewer(object):
         repo = gh_context.get_repo("{0}/{1}".format(self.project, self.repo))
         try:
             self.pull_request = repo.get_pull(int(os.environ['CHANGE_ID']))
+            if not hasattr(self.pull_request, 'create_review2'):
+                self.pull_request.create_review2 = pygithub_create_review2.__get__(self.pull_request)
+
         except KeyError:
             raise NotPullRequest
         self.commits = self.pull_request.get_commits()
+        self.patch = None
+        self.patch_files = set()
 
     def _debug(self, msg, *args):
         """_"""
@@ -389,27 +406,24 @@ class Reviewer(object):
                 for comment in review_input['comments'][path]:
                     if path not in review_input['files']:
                         continue
-                    try:
+                    if comment.get('in-patch', False):
                         if num_annotations < max_annotations:
-                            comments.append({
-                                "path": path,
-                                "position": comment['patch-line'],
-                                "body": comment['message']
-                            })
+                            github_comment = {'path': path, 'body': comment['message']}
+                            for key in ('line', 'start_line', 'side', 'start_side'):
+                                if key in comment:
+                                    github_comment[key] = comment[key]
+
+                            comments.append(github_comment)
+                            num_annotations += 1
                         else:
-                            extra_annotations += "\n[{0}:{1}](https://github.com/{4}" \
-                                                "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
-                                                    path, comment['line'], comment['message'],
-                                                    os.environ['GIT_COMMIT'], self.project,
-                                                    self.repo)
+                            if comment.get('include_in_extra', True):
+                                extra_annotations += "\n[{0}:{1}](https://github.com/{4}" \
+                                                     "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
+                                                         path, comment['line'], comment['message'],
+                                                         os.environ['GIT_COMMIT'], self.project,
+                                                         self.repo)
                         score = -1
-                        num_annotations += 1
-                    except KeyError:
-                        # not a line modified in the patch, add it to the
-                        # general message
-                        # but not for Functional tests for the time being
-                        if path == 'src/utils/py/daos_api.py':
-                            continue
+                    elif comment.get('include_in_extra', True):
                         extra_review_comment += "\n[{0}:{1}](https://github.com/{4}" \
                                                 "/{5}/blob/{3}/{0}#L{1}):\n{2}\n".format(
                                                     path, comment['line'], comment['message'],
@@ -458,12 +472,12 @@ class Reviewer(object):
             commit = None
 
         if not commit:
-            print "Couldn't find commit {} in:".format(os.environ['GIT_COMMIT'])
+            print("Couldn't find commit {} in:".format(os.environ['GIT_COMMIT']))
             for commit in self.commits:
-                print commit.sha
-            print "Environment:"
+                print(commit.sha)
+            print("Environment:")
             for k in sorted(os.environ.keys()):
-                print "%s=%s" % (k, os.environ[k])
+                print("%s=%s" % (k, os.environ[k]))
             sys.exit(1)
 
         score, event, comments, review_comment = \
@@ -485,13 +499,11 @@ class Reviewer(object):
                 if review.user and review.user.name and \
                    review.user.name.startswith("daosbuild") and \
                    review.state == "CHANGES_REQUESTED":
-                    if not hasattr(review, 'dismiss'):
-                        # monkey patch the dismiss method in
-                        review.dismiss = pygithub_dismiss.__get__(review)
                     review.dismiss("Updated patch")
 
             tries = 0
             max_tries = 4
+            force_comment = False
             while tries < max_tries:
                 tries += 1
                 try:
@@ -506,38 +518,40 @@ class Reviewer(object):
                                           "annotated comments due to GitHub " \
                                           "API limitations."
 
-                    if event != "COMMENT":
-                        res = self.pull_request.create_review(
-                            commit,
-                            review_comment,
-                            event=event,
-                            comments=comments)
-                        self._debug("Creating review on try %s complete: %s" % (tries, res))
-                        print "Successfully posted review after %s tries: %s " % \
-                              (tries, res)
+                    if force_comment:
+                        event = 'COMMENT'
+
+                    res = self.pull_request.create_review2(commit,
+                                                           review_comment,
+                                                           event=event,
+                                                           comments=comments)
+                    self._debug("Creating review on try %s complete: %s" % \
+                                (tries, res))
+                    print("Successfully posted review after %s tries: %s " % \
+                          (tries, res))
                     return score
                 except ssl.SSLError as excpn:
                     self._debug("Creating review on try %s got an SSLError" % tries)
                     if excpn.message == 'The read operation timed out':
                         continue
-                    print excpn
+                    print(excpn)
                     raise
                 except GithubException as excpn:
                     self._debug("Creating review on try %s got a GithubException" % tries)
                     if excpn.status == 422:
                         if excpn.data['errors'][0] == 'Path is invalid':
-                            print "Tried to sumbit patch comments with a path " \
+                            print("Tried to sumbit patch comments with a path " \
                                   "that is not in the patch.  Please raise a "\
-                                  "ticket about this."
-                            print "Annotation data:"
+                                  "ticket about this.")
+                            print("Annotation data:")
                             import pprint
                             pprint.PrettyPrinter(indent=4).pprint(comments)
                             return score
                         elif excpn.data['errors'][0] == 'Position is invalid':
-                            print "Error parsing the patch and mapping to lines " \
+                            print("Error parsing the patch and mapping to lines " \
                                   "of code for annotation.  Please raise a "\
-                                  "ticket about this."
-                            print "Annotation data:"
+                                  "ticket about this.")
+                            print("Annotation data:")
                             import pprint
                             pprint.PrettyPrinter(indent=4).pprint(comments)
                             return score
@@ -558,13 +572,15 @@ class Reviewer(object):
                                 self._debug("Attempt to post was rate-limited. " \
                                             "See data above.")
                                 return score
+                        elif excpn.data['errors'][0] == 'Can not request changes on your own pull request':
+                            force_comment = True
                         else:
-                            print "Unhandled 422 exception:"
-                            print "exception: %s" % excpn
-                            print "exception.status: %s" % excpn.status
-                            print "exception.data: %s" % excpn.data
+                            print("Unhandled 422 exception:")
+                            print("exception: %s" % excpn)
+                            print("exception.status: %s" % excpn.status)
+                            print("exception.data: %s" % excpn.data)
                             return score
-                    if excpn.status == 502:
+                    elif excpn.status == 502:
                         if excpn.data['message'] == 'Server Error':
                             self._debug("Got a 502 Server Error trying to post " \
                                         "review.  Probably exceeded the 10s API " \
@@ -572,24 +588,24 @@ class Reviewer(object):
                             time.sleep(5)
                             self._debug("Done sleeping 502")
                         else:
-                            print "Unhandled 502 exception:"
-                            print "exception: %s" % excpn
-                            print "exception.status: %s" % excpn.status
-                            print "exception.data: %s" % excpn.data
+                            print("Unhandled 502 exception:")
+                            print("exception: %s" % excpn)
+                            print("exception.status: %s" % excpn.status)
+                            print("exception.data: %s" % excpn.data)
                             return score
                     else:
                         raise
                 self._debug("Bottom of while loop")
             self._debug("Exited while loop")
-            print "Gave up trying to post the review after %s tries" % tries
+            print("Gave up trying to post the review after %s tries" % tries)
             return score
         else:
             import pprint
             pprinter = pprint.PrettyPrinter(indent=4)
-            print "commit: ", commit
-            print "review_comment:\n", review_comment
-            print "event:", event
-            print "comments (%s):\n" % len(comments)
+            print("commit: ", commit)
+            print("review_comment:\n", review_comment)
+            print("event:", event)
+            print("comments (%s):\n" % len(comments))
             pprinter.pprint(comments)
 
         return score
@@ -614,27 +630,23 @@ class Reviewer(object):
                                         env=my_env)
             except OSError as exception:
                 if exception.errno == 2:
-                    print "Could not find {0}".format(path)
+                    print("Could not find {0}".format(path))
                     sys.exit(1)
 
             out, err = pipe.communicate(patch.encode('utf-8'))
             self._debug("check_patch: path = %s %s, out = '%s...', err = '%s...'",
                         path, CHECKPATCH_ARGS, out[:80], err[:80])
-            parse_checkpatch_output(out, path_line_comments, warning_count, files)
+            parse_checkpatch_output(out.decode('utf-8'), path_line_comments, warning_count, files)
 
         return review_input_and_score(path_line_comments, warning_count)
 
-    def review_change(self):
-        """
-        Review the current patch on HEAD
-        * Pipe the patch through checkpatch(es).
-        * POST review to github.
-        """
-        score = 1
+    def pull_patch(self):
+        if self.patch:
+            return self.patch
         try:
             if 'PATCHFILE' in os.environ:
                 self._debug("Using patch in file %s" % os.environ['PATCHFILE'])
-                patch = open(os.environ['PATCHFILE']).read()
+                self.patch = open(os.environ['PATCHFILE']).read()
             else:
                 # I am sure there has got to be a way to arrive at this
                 # patch from the local repo, ignoring merge commits, etc.
@@ -655,29 +667,37 @@ class Reviewer(object):
                                                                      self.repo,
                                                                      self.pull_request.number)
                 resp = session.get(url)
-                patch = resp.text
+                self.patch = resp.text
         except subprocess.CalledProcessError as excpn:
             if excpn.returncode == 128:
-                print """Got error 128 trying to run git diff.
+                print("""Got error 128 trying to run git diff.
 Was there a race with getting the base from the pull request?
 I.e. was a new revision of the patch pushed before we could get
-the pull request data on the previous one?"""
+the pull request data on the previous one?""")
             raise
+        for line in self.patch.splitlines():
+            if line.startswith("--- a/") or \
+               line.startswith("+++ b/"):
+                self.patch_files.add(line.rstrip()[6:])
+        return self.patch
 
+    def review_change(self):
+        """
+        Review the current patch on HEAD
+        * Pipe the patch through checkpatch(es).
+        * POST review to github.
+        """
+        score = 1
+        patch = self.pull_patch()
         if not patch:
             self._debug("review_change: no patch")
             return score
 
-        files = set()
-        for line in patch.split('\n'):
-            if line.startswith("--- a/") or \
-               line.startswith("+++ b/"):
-                filename = line.rstrip()[6:]
-                files.add(filename)
-
-        review_input, score = self.check_patch(patch, files)
-        review_input['files'] = files
+        review_input, score = self.check_patch(patch, self.patch_files)
+        review_input['files'] = self.patch_files
         self._debug("review_change: score = %d", score)
+
+        self.run_from_diff(review_input)
 
         # add patch line numbers to review_input
         add_patch_linenos(review_input, patch)
@@ -687,9 +707,123 @@ the pull request data on the previous one?"""
 
     def update_single_change(self):
         """_"""
-        score = 1
-        score = self.review_change()
-        return score
+
+        return self.review_change()
+
+    def run_from_diff(self, review_input):
+        """Update review_input with new comments based on current
+        contents of source tree
+        """
+
+        def create_comment(header, patch_segment):
+            """returns a comment"""
+            elems = header.split(' ')
+            lineparts = elems[1].split(',')
+            lineno = int(lineparts[0]) * -1
+
+            in_patch = False
+            add_count = 0
+            remove_count = 0
+            new_text = []
+            append_text = []
+            start_line = -1
+            end_line = -1
+            comment = {'include_in_extra': False}
+
+            for line in patch_segment:
+                if line.startswith('+'):
+                    add_count += 1
+                    if append_text:
+                        new_text.extend(append_text)
+                        lineno += len(append_text)
+                        append_text = []
+                    if not in_patch:
+                        in_patch = True
+                        start_line = lineno
+                        append_text = []
+                    new_text.append(line[1:])
+                    if end_line < lineno:
+                        end_line = lineno
+                    lineno += 1
+                elif line.startswith('-'):
+                    remove_count += 1
+                    if not in_patch:
+                        lineno += len(append_text)
+                        append_text = []
+                        in_patch = True
+                        start_line = lineno
+                else:
+                    append_text.append(line[1:])
+            comment['message'] = '```suggestion\n{}\n```'.format('\n'.join(new_text))
+            if start_line == end_line:
+                comment['line'] = start_line
+            else:
+                comment['start_line'] = start_line
+                comment['line'] = end_line
+
+            if remove_count == 1 and add_count == 0:
+                comment['side'] = 'LEFT'
+            else:
+                comment['side'] = 'RIGHT'
+            if 'start_line' in comment:
+                comment['start_side'] = comment['side']
+            return comment
+
+        self.pull_patch()
+
+        cmd=['git', 'diff', '-U1']
+
+        pipe = subprocess.Popen(cmd,
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+
+        out, err = pipe.communicate()
+
+        skip_prefix = ['diff', 'index', '+++ b/']
+
+        filename = None
+        parts = []
+        lineno = None
+
+        if 'comments' not in review_input:
+            review_input['comments'] = {}
+
+        patch_segment = []
+        header = None
+        for line in out.decode('utf-8').splitlines():
+            skip = False
+            for prefix in skip_prefix:
+                if line.startswith(prefix):
+                    skip = True
+                    continue
+            if skip:
+                continue
+            if line.startswith('--- a/'):
+                _, filename = line.split('/', 1)
+
+            elif line.startswith('@@ '):
+                if patch_segment:
+                    new_comment = create_comment(header, patch_segment)
+                    if filename not in review_input['comments']:
+                        review_input['comments'][filename] = [new_comment]
+                    else:
+                        review_input['comments'][filename].append(new_comment)
+                patch_segment = []
+                header = line
+            elif line.startswith('-'):
+                patch_segment.append(line)
+            elif line.startswith('+'):
+                patch_segment.append(line)
+            else:
+                patch_segment.append(line)
+
+        if patch_segment:
+            new_comment = create_comment(header, patch_segment)
+            if filename not in review_input['comments']:
+                review_input['comments'][filename] = [new_comment]
+            else:
+                review_input['comments'][filename].append(new_comment)
 
 def main():
     """_"""
@@ -699,6 +833,16 @@ def main():
         reviewer = Reviewer()
     except NotPullRequest:
         sys.exit(0)
+
+    if False:
+        review_comments = {}
+        reviewer.run_from_diff(review_comments)
+        # add patch line numbers to review_input
+        add_patch_linenos(review_comments, reviewer.pull_patch())
+
+        import pprint
+        pprint.PrettyPrinter(indent=4).pprint(review_comments)
+        return
 
     score = reviewer.update_single_change()
     if score > 0:
