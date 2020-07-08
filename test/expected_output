@@ -1,6 +1,6 @@
 commit:  Commit(sha="...")
 review_comment:
-Style warning(s) for job ...
+ Style warning(s) for job ...
 Please review https://wiki.hpdd.intel.com/display/DC/Coding+Rules
 
 FYI: Errors found in lines not modified in the patch:
