@@ -11,7 +11,7 @@ FYI: Errors found in lines not modified in the patch:
 event: REQUEST_CHANGES
 comments (1):
 
-[   {   'body': '(lint) Double quote to prevent globbing and word splitting.'
+[   {   'body': '(lint) Double quote to prevent globbing and word splitting. '
                 '[SC2086]',
-        'position': 3,
+        'line': 3,
         'path': 'test/shell_error.sh'}]
