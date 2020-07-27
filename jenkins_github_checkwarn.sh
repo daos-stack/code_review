@@ -88,7 +88,14 @@ if [ -n "${GERRIT_PROJECT-}" ]; then
   set -u
 fi
 
-python "${checkpatch_py}"
+if [ -x ./ci/patch_src_in_place ]
+then
+    ./ci/patch_src_in_place
+fi
+
+python3 "${checkpatch_py}"
 result=$?
+
+git checkout .
 
 exit ${result}
