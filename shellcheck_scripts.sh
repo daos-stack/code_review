@@ -45,7 +45,7 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
     if  [ -f "${script_file}" ] &&
         ( [[ ${script_file} == *.sh ]] ||
       grep -m 1 -E '^#!/bin/(bash|sh)' "${script_file}" ); then
-      if ! shellcheck --format=gcc "${script_file}"; then
+      if ! shellcheck -x --format=gcc "${script_file}"; then
         (( rc=rc+PIPESTATUS[0] ))
       fi
     fi
