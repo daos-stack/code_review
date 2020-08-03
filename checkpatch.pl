@@ -2799,7 +2799,7 @@ sub process {
 #   known attributes or the __attribute__ keyword
 		if ($line =~ /^\+(.*)\(\s*$Type\s*\)([ \t]++)((?![={]|\\$|$Attribute|__attribute__))/ &&
 		    (!defined($1) || $1 !~ /\b(?:sizeof|__alignof__)\s*$/)) {
-			if (CHK("SPACING",
+			if (CHK("SPACING_CAST",
 				"No space is necessary after a cast\n" . $herecurr) &&
 			    $fix) {
 				$fixed[$fixlinenr] =~

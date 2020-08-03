@@ -319,7 +319,6 @@ def add_patch_linenos(review_input, patch):
             continue
         if line.startswith("+++ b/"):
             filename = line.rstrip()[6:]
-#            review_input['files'].add(filename)
             hunknum = 0
             patch_lineno = 0
             continue
@@ -497,7 +496,7 @@ class Reviewer(object):
             # changes and this one could just be a comment (nothing wrong)
             for review in self.pull_request.get_reviews():
                 if review.user and review.user.name and \
-                   review.user.name.startswith("daosbuild") and \
+                   review.user.name.startswith(os.environ['GH_USER']) and \
                    review.state == "CHANGES_REQUESTED":
                     review.dismiss("Updated patch")
 
@@ -574,6 +573,11 @@ class Reviewer(object):
                                 return score
                         elif excpn.data['errors'][0] == 'Can not request changes on your own pull request':
                             force_comment = True
+                        elif excpn.data['errors'][0] == 'Start line must be part of the same hunk as the line.':
+                            print("exception: %s" % excpn)
+                            import pprint
+                            pprint.PrettyPrinter(indent=4).pprint(comments)
+                            return score
                         else:
                             print("Unhandled 422 exception:")
                             print("exception: %s" % excpn)
@@ -769,8 +773,6 @@ the pull request data on the previous one?""")
                 comment['start_side'] = comment['side']
             return comment
 
-        self.pull_patch()
-
         cmd=['git', 'diff', '-U1']
 
         pipe = subprocess.Popen(cmd,
@@ -800,6 +802,15 @@ the pull request data on the previous one?""")
             if skip:
                 continue
             if line.startswith('--- a/'):
+                if patch_segment:
+                    new_comment = create_comment(header, patch_segment)
+                    if filename not in review_input['comments']:
+                        review_input['comments'][filename] = [new_comment]
+                    else:
+                        review_input['comments'][filename].append(new_comment)
+                patch_segment = []
+                header = line
+
                 _, filename = line.split('/', 1)
 
             elif line.startswith('@@ '):
