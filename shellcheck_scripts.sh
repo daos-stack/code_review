@@ -29,6 +29,12 @@ if [ ! -d "${PROJECT_REPO}" ]; then
   fi
 fi
 
+# Follow external references if shellcheck supports it.
+external=
+if (shellcheck --help | grep "\-\-external") &> /dev/null; then
+  external=--external
+fi
+
 rc=0
 pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
@@ -44,8 +50,8 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
     if  [ -f "${script_file}" ] &&
         ( [[ ${script_file} == *.sh ]] ||
-      grep -m 1 -E '^#!/bin/(bash|sh)' "${script_file}" ); then
-      if ! shellcheck --format=gcc "${script_file}"; then
+      grep -m 1 -E '^#!(/usr)*/bin/.*(bash|sh)' "${script_file}" ); then
+      if ! shellcheck ${external} --format=gcc "${script_file}"; then
         (( rc=rc+PIPESTATUS[0] ))
       fi
     fi

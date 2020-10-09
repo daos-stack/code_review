@@ -1,5 +1,5 @@
 #!/usr/bin/groovy
-/* Copyright (C) 2019 Intel Corporation
+/* Copyright (C) 2019-2020 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,10 +63,10 @@ pipeline {
                 stage('checkpatch') {
                     agent {
                         dockerfile {
-                            filename 'Dockerfile.centos.7'
+                            filename 'Dockerfile.code_review'
                             dir 'utils/docker'
                             label 'docker_runner'
-                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-cr " + '$BUILDARGS'
                         }
                     }
                     steps {
@@ -110,10 +110,10 @@ pipeline {
         stage('Test') {
             agent {
                 dockerfile {
-                    filename 'Dockerfile.centos.7'
+                    filename 'Dockerfile.code_review'
                     dir 'utils/docker'
                     label 'docker_runner'
-                    additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                    additionalBuildArgs "-t ${sanitized_JOB_NAME}-cr " + '$BUILDARGS'
                 }
             }
             steps {

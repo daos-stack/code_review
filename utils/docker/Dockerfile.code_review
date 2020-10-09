@@ -1,0 +1,13 @@
+#
+# Copyright 2019, Intel Corporation
+#
+#
+
+# Pull base image
+FROM fedora:latest
+MAINTAINER Brian J. Murrell <brian.murrell@intel.com>
+
+RUN dnf install -y bandit codespell diffutils git \
+                   perl \
+                   python3-pip python3-pygithub python3-requests \
+                   ShellCheck
