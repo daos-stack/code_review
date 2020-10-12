@@ -116,8 +116,8 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
     fi
     if [[ ${script_file} == *.py ]]; then
       # if there is a shebang use it.
-      if grep '^#!(/usr)*/bin/.*python' "${script_file}"; then
-        if grep '^#!(/usr)*/bin/.*python3' "${script_file}"; then
+      if (head -1 "$script_file" | grep -E '^#!(/usr)?/bin/.*python'); then
+        if (head -1 "$script_file" | grep -E '^#!(/usr)?/bin/.*python3'); then
           if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
             "${PYLINT_OUT}" 2>&1; then
             (( rc=rc+PIPESTATUS[0] ))
@@ -142,8 +142,8 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
         fi
       fi
     else
-      if grep '^#!/bin/.*python' "${script_file}"; then
-        if grep '^#!/bin/.*python3' "${script_file}"; then
+      if (head -1 "$script_file" | grep -E '^#!(/usr)?/bin/.*python'); then
+        if (head -1 "$script_file" | grep -E '^#!(/usr)?/bin/.*python3'); then
           if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
             "${PYLINT_OUT}" 2>&1; then
             (( rc=rc+PIPESTATUS[0] ))

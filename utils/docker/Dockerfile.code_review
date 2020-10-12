@@ -1,11 +1,11 @@
 #
-# Copyright 2019, Intel Corporation
+# Copyright 2020, Intel Corporation
 #
 #
 
 # Pull base image
 FROM fedora:latest
-MAINTAINER Brian J. Murrell <brian.murrell@intel.com>
+MAINTAINER daos-stack <daos@daos.groups.io>
 
 RUN dnf install -y bandit codespell diffutils git \
                    perl \
