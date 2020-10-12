@@ -50,7 +50,8 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
     if  [ -f "${script_file}" ] &&
         ( [[ ${script_file} == *.sh ]] ||
-         (head -1 "$script_file" | grep -E '^#!(/usr)?/bin/.*(bash|sh)')); then
+         (head -1 "$script_file" | \
+          grep -q -E '^#!(/usr)?/bin/.*(bash|sh)')); then
       if ! shellcheck ${external} --format=gcc "${script_file}"; then
         (( rc=rc+PIPESTATUS[0] ))
       fi
