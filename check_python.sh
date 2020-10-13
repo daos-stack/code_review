@@ -69,14 +69,6 @@ popd || exit 1
 pylint_rc="$(find "${repo}" -name pylint.rc -print -quit)"
 pylint3_rc="$(find "${repo}" -name pylint3.rc -print -quit)"
 
-def_python="python"
-tox_ini="$(find "${repo}" -name tox.ini -print -quit)"
-if [ -e "${tox_ini}" ]; then
-  if grep envlist "${tox_ini}" | grep py3; then
-    def_python="python3"
-  fi
-fi
-
 pyl_opts=""
 pyl3_opts=""
 
@@ -111,50 +103,17 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
     IFS=" " read -r -a pylint_cmd <<< "${pylint} ${pyl_opts} ${script_file}"
     IFS=" " read -r -a pylint3_cmd <<< "${pylint} ${pyl3_opts} ${script_file}"
-    if [ ! -f "${script_file}" ]; then
-        continue
-    fi
-    if [[ ${script_file} == *.py ]]; then
-      # if there is a shebang use it.
-      if (head -1 "$script_file" | grep -q -E '^#!(/usr)?/bin/.*python'); then
-        if (head -1 "$script_file" | \
-            grep -q -E '^#!(/usr)?/bin/.*python3'); then
-          if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1; then
-            (( rc=rc+PIPESTATUS[0] ))
-          fi
-        else
-          if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1; then
-            (( rc=rc+PIPESTATUS[0] ))
-          fi
+    if file "$script_file" | grep -q -E 'Python script'; then
+      if head -1 "$script_file" | grep -q -e 'python3'; then
+        if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
+          "${PYLINT_OUT}" 2>&1; then
+          (( rc=rc+PIPESTATUS[0] ))
         fi
       else
-        if [ "${def_python}" == "python" ]; then
-          if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1; then
-            (( rc=rc+PIPESTATUS[0] ))
-          fi
-        else
-          if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1; then
-            (( rc=rc+PIPESTATUS[0] ))
-          fi
-        fi
-      fi
-    else
-      if (head -1 "$script_file" | grep -q -E '^#!(/usr)?/bin/.*python'); then
-        if (head -1 "$script_file" | \
-            grep -q -E '^#!(/usr)?/bin/.*python3'); then
-          if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1; then
-            (( rc=rc+PIPESTATUS[0] ))
-          fi
-        else
-          if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
-            "${PYLINT_OUT}" 2>&1; then
-            (( rc=rc+PIPESTATUS[0] ))
-          fi
+        # Default python, which on current Fedora, etc is same as python3
+        if ! python "${pylint_cmd[@]}" --msg-template "${tmpl}" >> \
+          "${PYLINT_OUT}" 2>&1; then
+          (( rc=rc+PIPESTATUS[0] ))
         fi
       fi
     fi
