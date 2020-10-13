@@ -103,7 +103,7 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
 
     IFS=" " read -r -a pylint_cmd <<< "${pylint} ${pyl_opts} ${script_file}"
     IFS=" " read -r -a pylint3_cmd <<< "${pylint} ${pyl3_opts} ${script_file}"
-    if file "$script_file" | grep -q -E 'Python script'; then
+    if file "$script_file" | grep -q -e 'Python script'; then
       if head -1 "$script_file" | grep -q -e 'python3'; then
         if ! python3 "${pylint3_cmd[@]}" --msg-template "${tmpl}" >> \
           "${PYLINT_OUT}" 2>&1; then
