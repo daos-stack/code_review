@@ -41,10 +41,7 @@ pushd "${PROJECT_REPO}" > /dev/null || exit 1
   fi
 
   for script_file in ${file_list}; do
-
-    if [ -f "${script_file}" ] &&
-       ( [[ ${script_file} == *.rb ]] ||
-      grep '^#!/bin/.*ruby' "${script_file}" ); then
+    if file "$script_file" | grep -q -e 'Ruby script'; then
       if ! ruby-lint "${script_file}"; then
         (( rc=rc+PIPESTATUS[0] ))
       fi

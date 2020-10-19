@@ -1,0 +1,13 @@
+#
+# Copyright 2020, Intel Corporation
+#
+#
+
+# Pull base image
+FROM fedora:latest
+MAINTAINER daos-stack <daos@daos.groups.io>
+
+RUN dnf install -y bandit codespell diffutils git \
+                   perl \
+                   python3-pygithub python3-requests \
+                   ShellCheck
