@@ -144,8 +144,7 @@ def parse_checkpatch_output(out, path_line_comments, warning_count, files):
 
         for pattern in CHECKPATCH_IGNORED_FILES:
             if fnmatch.fnmatch(path, pattern):
-                logging.debug("But suppresing due to matching "
-                              "CHECKPATCH_IGNORED_FILES")
+                logging.debug("But suppresing due to matching %s" % pattern)
                 return
 
         path_comments = path_line_comments.setdefault(path, {})
