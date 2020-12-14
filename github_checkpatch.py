@@ -733,6 +733,7 @@ the pull request data on the previous one?""")
             start_line = -1
             end_line = -1
             comment = {'include_in_extra': False}
+            last_plain_line = None
 
             for line in patch_segment:
                 if line.startswith('+'):
@@ -757,7 +758,10 @@ the pull request data on the previous one?""")
                         in_patch = True
                         start_line = lineno
                 else:
-                    append_text.append(line[1:])
+                    last_plain_line = line[1:]
+                    append_text.append(last_plain_line)
+            if add_count == 1 and remove_count == 0:
+                new_text.append(last_plain_line)
             comment['message'] = '```suggestion\n{}\n```'.format('\n'.join(new_text))
             if start_line == end_line:
                 comment['line'] = start_line
@@ -832,7 +836,13 @@ the pull request data on the previous one?""")
         if patch_segment:
             new_comment = create_comment(header, patch_segment)
             if filename not in review_input['comments']:
-                review_input['comments'][filename] = [new_comment]
+                # Check ignore list
+                include = True
+                for pattern in CHECKPATCH_IGNORED_FILES:
+                    if fnmatch.fnmatch(filename, pattern):
+                        include = False
+                if include:
+                    review_input['comments'][filename] = [new_comment]
             else:
                 review_input['comments'][filename].append(new_comment)
 
