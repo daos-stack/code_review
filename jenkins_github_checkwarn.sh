@@ -91,6 +91,8 @@ fi
 pwd
 ls
 
+ls ./ci/patch_src_in_place
+
 if [ -x ./ci/patch_src_in_place ]
 then
     ./ci/patch_src_in_place
