@@ -91,13 +91,15 @@ fi
 pwd
 ls
 
-ls ./ci/patch_src_in_place
+ls -l ./ci/patch_src_in_place
 
-if [ -x ./ci/patch_src_in_place ]
+if [ -x ci/patch_src_in_place ]
 then
     ./ci/patch_src_in_place
     git diff
 fi
+
+./ci/patch_src_in_place
 
 python3 "${checkpatch_py}"
 result=$?
