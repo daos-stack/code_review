@@ -88,9 +88,13 @@ if [ -n "${GERRIT_PROJECT-}" ]; then
   set -u
 fi
 
+pwd
+ls
+
 if [ -x ./ci/patch_src_in_place ]
 then
     ./ci/patch_src_in_place
+    git diff
 fi
 
 python3 "${checkpatch_py}"
