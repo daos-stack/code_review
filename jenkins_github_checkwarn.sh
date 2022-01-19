@@ -88,7 +88,7 @@ if [ -n "${GERRIT_PROJECT-}" ]; then
   set -u
 fi
 
-if [ -x ./ci/patch_src_in_place ]
+if [ -f ./ci/patch_src_in_place ]
 then
     ./ci/patch_src_in_place
 fi
