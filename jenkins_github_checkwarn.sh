@@ -2,7 +2,7 @@
 
 # comma separated list
 def_ignore="SPLIT_STRING,SSCANF_TO_KSTRTO,PREFER_KERNEL_TYPES,BRACES"
-def_ignore+=",USE_NEGATIVE_ERRNO,CAMELCASE,STATIC_CONST_CHAR_ARRAY"
+def_ignore+=",USE_NEGATIVE_ERRNO,CAMELCASE,STATIC_CONST_CHAR_ARRAY,SPACING"
 
 : "${IGNORE:="${def_ignore}"}"
 
@@ -34,7 +34,12 @@ set -u
 # colon separated list
 def_checkpatch_paths="${check_make}"
 if [ "${FULL_REVIEW}" -ne 0 ]; then
-  def_checkpatch_paths+=":${check_style}:${check_shell}:${check_python}"
+  # Skip pylint checking if performed by GitHub.
+  if [ -e .github/workflows/pylint.yml ]; then
+    def_checkpatch_paths+=":${check_style}:${check_shell}"
+  else
+    def_checkpatch_paths+=":${check_style}:${check_shell}:${check_python}"
+  fi
 fi
 
 : "${CHECKPATCH_PATHS:="${def_checkpatch_paths}"}"
@@ -60,32 +65,6 @@ export REVIEW_HISTORY_PATH="${REVIEW_HISTORY_BASE}"/REVIEW_HISTORY
 if [ ! -e "$REVIEW_HISTORY_PATH" ]; then
   mkdir -p "${REVIEW_HISTORY_BASE}"
   touch "${REVIEW_HISTORY_PATH}"
-fi
-
-# CentOS PyOpenSSL out of date, need a virtualenv to use correct one.
-
-if [ -n "${GERRIT_PROJECT-}" ]; then
-  # Some prompt variables are usually not set.
-  set +u
-  if [ -n "${WORKSPACE}" ];then
-    # Need to remove older virtualenv with pip/wheel etc.
-    if grep "\\#\\!${WORKSPACE}"  -r test_env; then
-      rm -rf test_env
-    fi
-  fi
-  if [ ! -e test_env ]; then
-    virtualenv --system-site-packages \
-      --no-setuptools --no-pip --no-wheel test_env
-    # shellcheck disable=SC1091
-    source test_env/bin/activate
-    pip install -I --root test_env --prefix test_env \
-      -U --force-reinstall pyOpenSSL
-    pip install -I --root test_env --prefix test_env -U pylint flake8
-  else
-    # shellcheck disable=SC1091
-    source test_env/bin/activate
-  fi
-  set -u
 fi
 
 if [ -f ./ci/patch_src_in_place ]
