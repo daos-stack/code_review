@@ -439,7 +439,6 @@ class Reviewer(object):
             event = "REQUEST_CHANGES"
         else:
             event = "COMMENT"
-            review_comment = "LGTM.  No errors found by checkpatch."
 
         if extra_annotations != "":
             if review_comment != "":
@@ -481,6 +480,9 @@ class Reviewer(object):
 
         score, event, comments, review_comment = \
             self.create_github_review(review_input, commit.sha)
+
+        if review_comment == '':
+            sys.exit(0)
 
         # only post if running in Jenkins
         if 'JENKINS_URL' in os.environ and \
