@@ -15,7 +15,6 @@ fi
 checkpatch_py="$(find -L "${mydir}" -name $checkpatch_py -print -quit)"
 
 check_make="$(find -L "${mydir}" -name check_make_output.sh -print -quit)"
-check_style="$(find -L "${mydir}" -name checkpatch.pl -print -quit)"
 check_shell="$(find -L "${mydir}" -name shellcheck_scripts.sh -print -quit)"
 check_python="$(find -L "${mydir}" -name check_python.sh -print -quit)"
 
@@ -36,9 +35,9 @@ def_checkpatch_paths="${check_make}"
 if [ "${FULL_REVIEW}" -ne 0 ]; then
   # Skip pylint checking if performed by GitHub.
   if [ -e .github/workflows/pylint.yml ]; then
-    def_checkpatch_paths+=":${check_style}:${check_shell}"
+    def_checkpatch_paths+=":${check_shell}"
   else
-    def_checkpatch_paths+=":${check_style}:${check_shell}:${check_python}"
+    def_checkpatch_paths+=":${check_shell}:${check_python}"
   fi
 fi
 
