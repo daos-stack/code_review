@@ -34,11 +34,15 @@ set -u
 # colon separated list
 def_checkpatch_paths="${check_make}"
 if [ "${FULL_REVIEW}" -ne 0 ]; then
+  # Only do style checking if not performed by GitHub.
+  if [ ! -e .github/workflows/clang-format.yml ]; then
+    def_checkpatch_paths+=":${check_style}"
+  fi
   # Skip pylint checking if performed by GitHub.
   if [ -e .github/workflows/pylint.yml ]; then
-    def_checkpatch_paths+=":${check_style}:${check_shell}"
+    def_checkpatch_paths+=":${check_shell}"
   else
-    def_checkpatch_paths+=":${check_style}:${check_shell}:${check_python}"
+    def_checkpatch_paths+=":${check_shell}:${check_python}"
   fi
 fi
 
