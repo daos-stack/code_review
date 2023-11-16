@@ -482,6 +482,9 @@ class Reviewer(object):
         score, event, comments, review_comment = \
             self.create_github_review(review_input, commit.sha)
 
+        if not comments and review_comment == "LGTM.  No errors found by checkpatch.":
+            return
+
         # only post if running in Jenkins
         if 'JENKINS_URL' in os.environ and \
             os.environ.get('DISPLAY_RESULTS', 'false') == 'false':
